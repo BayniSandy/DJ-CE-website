@@ -1,0 +1,3055 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DJ-CE Service Portal</title>
+<meta name="theme-color" content="#0d1f3c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="DJ-CE Portal">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.7.0/jspdf.plugin.autotable.min.js"></script>
+<style>
+/* ============ THEME ============ */
+:root {
+  --bg: #0a1628;
+  --bg-elev: #0d1f3c;
+  --bg-elev2: #142340;
+  --card: #0d1f3c;
+  --border: #1e3358;
+  --text: #f1f5f9;
+  --text-dim: #94a3b8;
+  --muted: #64748b;
+  --primary: #0d1f3c;
+  --primary-soft: #0f1d2e;
+  --primary-hover: #1a3566;
+  --accent: #f59e0b;
+  --accent-soft: rgba(245,158,11,0.15);
+  --success: #10b981;
+  --success-soft: #064e3b;
+  --warning: #f59e0b;
+  --warning-soft: #78350f;
+  --danger: #ef4444;
+  --danger-soft: #7f1d1d;
+  --info: #3b82f6;
+  --info-soft: #1e3a8a;
+  --shadow: rgba(0,0,0,0.4);
+  --deco-opacity: 0.05;
+}
+[data-theme="light"] {
+  --bg: #f8f6f1;
+  --bg-elev: #ffffff;
+  --bg-elev2: #f1f5f9;
+  --card: #ffffff;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --text-dim: #475569;
+  --muted: #94a3b8;
+  --primary: #0d1f3c;
+  --primary-soft: #dbe7f5;
+  --primary-hover: #1a3566;
+  --accent: #f59e0b;
+  --accent-soft: #fef3c7;
+  --success: #059669;
+  --success-soft: #d1fae5;
+  --warning: #d97706;
+  --warning-soft: #fef3c7;
+  --danger: #dc2626;
+  --danger-soft: #fee2e2;
+  --info: #2563eb;
+  --info-soft: #dbeafe;
+  --shadow: rgba(15,23,42,0.08);
+  --deco-opacity: 0.04;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family:'Plus Jakarta Sans',sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size:14px;
+  line-height:1.5;
+  min-height:100vh;
+  transition: background 0.3s, color 0.3s;
+  position:relative;
+  overflow-x:hidden;
+}
+body::before, body::after {
+  content:'';
+  position:fixed;
+  pointer-events:none;
+  opacity: var(--deco-opacity);
+  z-index:0;
+}
+body::before {
+  width:700px; height:700px;
+  top:-250px; right:-150px;
+  border-radius:50%;
+  background: radial-gradient(circle, #f59e0b 0%, transparent 70%);
+}
+body::after {
+  width:500px; height:500px;
+  bottom:-150px; left:-100px;
+  border-radius:50%;
+  background: radial-gradient(circle, #0d1f3c 0%, transparent 70%);
+}
+.deco-bg {
+  position:fixed; pointer-events:none; opacity:var(--deco-opacity);
+  font-size:180px; z-index:0; user-select:none;
+}
+.deco-1 { top:8%; right:6%; transform:rotate(-10deg); }
+.deco-2 { bottom:6%; left:4%; transform:rotate(15deg); font-size:140px; }
+
+#appContainer { position:relative; z-index:1; }
+
+/* ============ LOGIN ============ */
+.login-wrap {
+  min-height:100vh;
+  display:flex; align-items:center; justify-content:center;
+  padding:20px;
+}
+.login-card {
+  background: var(--bg-elev);
+  border-radius:24px;
+  max-width:900px; width:100%;
+  display:grid; grid-template-columns:1fr 1fr; overflow:hidden;
+  box-shadow: 0 24px 60px var(--shadow);
+  border: 1px solid var(--border);
+}
+@media(max-width:760px){ .login-card{grid-template-columns:1fr} .login-left{display:none} }
+
+.login-left {
+  background: linear-gradient(135deg, #0a1220 0%, #0d1f3c 50%, #1a3566 100%);
+  color:#fff; padding:48px 40px;
+  display:flex; flex-direction:column; justify-content:space-between;
+  position:relative; overflow:hidden;
+}
+.login-left::before {
+  content:'❄️';
+  position:absolute; right:-20px; top:-30px;
+  font-size:260px; opacity:0.08; transform:rotate(10deg);
+}
+.ll-brand { font-size:38px; font-weight:800; letter-spacing:-1px; position:relative; z-index:1; }
+.ll-brand span { color:#f59e0b; }
+.ll-tag {
+  display:inline-flex; align-items:center; gap:6px; margin-top:8px;
+  font-size:11px; text-transform:uppercase; letter-spacing:0.6px;
+  opacity:0.85; font-weight:600; position:relative; z-index:1;
+}
+.ll-welcome { position:relative; z-index:1; }
+.ll-welcome h2 { font-size:22px; font-weight:800; margin-bottom:10px; line-height:1.3; }
+.ll-welcome p { font-size:12.5px; opacity:0.85; line-height:1.6; max-width:280px; }
+.feat-list { margin-top:20px; display:flex; flex-direction:column; gap:8px; }
+.feat-item { font-size:12px; display:flex; align-items:center; gap:8px; opacity:0.9; }
+.feat-item .ic { width:24px; height:24px; background:rgba(245,158,11,0.2); border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:12px; }
+.ll-copy { font-size:10.5px; opacity:0.55; position:relative; z-index:1; }
+
+.login-right { padding:48px 44px; display:flex; flex-direction:column; justify-content:center; }
+.login-head { margin-bottom:24px; }
+.login-head h1 { font-size:22px; font-weight:800; }
+.login-head p { font-size:13px; color:var(--text-dim); margin-top:4px; }
+
+.field { margin-bottom:14px; }
+.field label { display:block; font-size:11px; font-weight:700; color:var(--text-dim); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.4px; }
+.field input, .field select, .field textarea {
+  width:100%; padding:11px 14px;
+  border:1.5px solid var(--border); border-radius:10px;
+  background: var(--bg); color: var(--text);
+  font-family:inherit; font-size:14px; outline:none; transition:all 0.15s;
+}
+.field input:focus, .field select:focus, .field textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(245,158,11,0.15); }
+.field textarea { resize:vertical; min-height:80px; }
+
+.btn-login {
+  width:100%; padding:13px;
+  background: linear-gradient(90deg, #0d1f3c, #1a3566);
+  border:2px solid var(--accent);
+  color:#fff; border-radius:10px; font-family:inherit; font-size:14px;
+  font-weight:700; cursor:pointer; transition:all 0.15s; letter-spacing:0.3px;
+}
+.btn-login:hover { transform:translateY(-1px); box-shadow:0 8px 20px rgba(245,158,11,0.3); }
+.btn-login:disabled { opacity:0.6; cursor:wait; }
+
+.err-msg {
+  background: var(--danger-soft); color: var(--danger);
+  padding:10px 14px; border-radius:8px;
+  font-size:12px; margin-bottom:14px; display:none; border-left:3px solid var(--danger);
+}
+.err-msg.show { display:block; }
+
+.demo-creds {
+  margin-top:20px; padding:14px;
+  background: var(--bg-elev2);
+  border-radius:10px; font-size:11.5px; line-height:1.6;
+  border:1px solid var(--border);
+}
+.demo-creds strong { color:var(--text); font-size:11px; text-transform:uppercase; letter-spacing:0.4px; }
+.cred-line { display:flex; justify-content:space-between; padding:3px 0; align-items:center; }
+.cred-role { color:var(--text-dim); font-weight:600; font-size:11px; }
+.cred-pass { font-family:monospace; color:var(--accent); cursor:pointer; font-size:11px; }
+.cred-pass:hover { text-decoration:underline; }
+
+/* ============ PORTAL ============ */
+#portalApp { display:none; min-height:100vh; }
+.portal-active #loginScreen { display:none; }
+.portal-active #portalApp { display:flex; }
+
+/* SIDEBAR */
+.sidebar {
+  width:240px;
+  background: linear-gradient(180deg, #080f1e 0%, #0d1f3c 100%);
+  color:#fff;
+  position:fixed; top:0; left:0; bottom:0;
+  display:flex; flex-direction:column;
+  z-index:50;
+  border-right: 1px solid rgba(245,158,11,0.1);
+  transition: width 0.22s cubic-bezier(.4,0,.2,1);
+  overflow:hidden;
+}
+[data-theme="light"] .sidebar { background: linear-gradient(180deg, #0d1f3c 0%, #1a3566 100%); }
+.sidebar.collapsed { width:60px; }
+.sidebar.collapsed .sb-tag,
+.sidebar.collapsed .sb-brand,
+.sidebar.collapsed .nav-sec,
+.sidebar.collapsed .nav-item .nav-label,
+.sidebar.collapsed .nav-badge,
+.sidebar.collapsed .user-info,
+.sidebar.collapsed .user-logout-icon { display:none !important; }
+.sidebar.collapsed .sb-logo { padding:14px 0; display:flex; justify-content:center; }
+.sidebar.collapsed .sb-nav { padding:8px 6px; }
+.sidebar.collapsed .nav-item { justify-content:center; padding:10px 0; border-radius:10px; }
+.sidebar.collapsed .nav-item .ic { width:auto; font-size:18px; }
+.sidebar.collapsed .sb-foot { padding:8px 6px; }
+.sidebar.collapsed .user-card { justify-content:center; padding:8px 0; }
+.sidebar.collapsed #sbCollapseBtn { justify-content:center; }
+.sidebar.collapsed .sb-collapse-logo { display:flex !important; }
+
+#sbCollapseBtn {
+  display:flex; align-items:center; gap:8px;
+  padding:8px 12px; margin:0 10px 10px;
+  background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.15);
+  border-radius:8px; cursor:pointer; color:#f59e0b; font-size:12px;
+  font-weight:600; transition:all 0.15s; white-space:nowrap; width:calc(100% - 20px);
+}
+#sbCollapseBtn:hover { background:rgba(245,158,11,0.15); }
+.sidebar.collapsed #sbCollapseBtn { width:calc(100% - 12px); margin:0 6px 8px; padding:8px 0; justify-content:center; }
+.sb-collapse-logo { display:none; font-size:20px; }
+
+.sb-logo { padding:20px 18px; border-bottom:1px solid rgba(245,158,11,0.1); position:relative; overflow:hidden; transition:padding 0.22s; }
+.sb-logo::after { content:'❄️'; position:absolute; right:-10px; bottom:-10px; font-size:55px; opacity:0.1; transform:rotate(10deg); }
+.sb-brand { font-size:20px; font-weight:800; letter-spacing:-0.5px; position:relative; z-index:1; white-space:nowrap; }
+.sb-brand span { color:#f59e0b; }
+.sb-tag { font-size:10px; color:#f59e0b; text-transform:uppercase; letter-spacing:0.6px; margin-top:3px; font-weight:600; display:flex; align-items:center; gap:5px; position:relative; z-index:1; white-space:nowrap; opacity:0.8; }
+.sb-nav { flex:1; padding:12px 10px; overflow-y:auto; overflow-x:hidden; }
+.sb-nav::-webkit-scrollbar { width:3px; }
+.sb-nav::-webkit-scrollbar-thumb { background:rgba(245,158,11,0.2); border-radius:6px; }
+.nav-sec { font-size:10px; text-transform:uppercase; letter-spacing:0.8px; color:#f59e0b; padding:12px 10px 5px; font-weight:700; opacity:0.7; white-space:nowrap; }
+.nav-item {
+  display:flex; align-items:center; gap:10px;
+  padding:9px 12px; border-radius:8px;
+  cursor:pointer; font-size:13px; color:#cbd5e1;
+  transition:all 0.15s; margin-bottom:2px; white-space:nowrap;
+}
+.nav-item:hover { background:rgba(245,158,11,0.08); color:#fff; }
+.nav-item.active { background:rgba(245,158,11,0.15); color:#f59e0b; border-left:3px solid #f59e0b; }
+.nav-item .ic { width:18px; text-align:center; font-size:14px; flex-shrink:0; }
+.nav-label { flex:1; }
+.nav-badge-warn { background:var(--warning); color:#0d1f3c; }
+.nav-badge { margin-left:auto; background:var(--danger); color:#fff; font-size:10px; padding:1px 6px; border-radius:10px; font-weight:700; flex-shrink:0; }
+
+.sidebar.collapsed .nav-item { position:relative; }
+.sidebar.collapsed .nav-item:hover::after {
+  content: attr(data-tip);
+  position:absolute; left:calc(100% + 8px); top:50%; transform:translateY(-50%);
+  background:rgba(8,15,30,0.98); color:#fff; font-size:12px; font-weight:600;
+  padding:5px 10px; border-radius:7px; white-space:nowrap; z-index:200;
+  border:1px solid rgba(245,158,11,0.3); pointer-events:none;
+  box-shadow:0 4px 14px rgba(0,0,0,0.5);
+}
+
+.sb-foot { padding:14px; border-top:1px solid rgba(245,158,11,0.1); }
+.user-card {
+  display:flex; align-items:center; gap:10px; padding:8px;
+  background:rgba(245,158,11,0.07); border-radius:8px;
+  cursor:pointer; transition:all 0.15s; border:1px solid rgba(245,158,11,0.1);
+}
+.user-card:hover { background:rgba(245,158,11,0.12); }
+.user-avatar { width:32px; height:32px; background:linear-gradient(135deg,#f59e0b,#d97706); color:#0d1f3c; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:11px; flex-shrink:0; }
+.user-info { flex:1; min-width:0; }
+.user-name { color:#fff; font-weight:600; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.user-role { font-size:10px; color:#f59e0b; }
+.user-logout-icon { color:#94a3b8; font-size:11px; }
+
+/* MAIN */
+.main {
+  flex:1; margin-left:240px;
+  min-height:100vh; display:flex; flex-direction:column;
+  transition: margin-left 0.22s cubic-bezier(.4,0,.2,1);
+}
+.sidebar.collapsed ~ .main { margin-left:60px; }
+.topbar {
+  background: var(--bg-elev);
+  border-bottom:1px solid var(--border);
+  padding:0 32px; height:62px;
+  display:flex; align-items:center; justify-content:space-between;
+  position:sticky; top:0; z-index:40;
+  backdrop-filter: blur(10px);
+}
+.page-title { font-size:16px; font-weight:700; }
+.page-sub { font-size:11.5px; color:var(--text-dim); margin-top:1px; }
+.topbar-right { display:flex; gap:8px; align-items:center; }
+.icon-btn {
+  width:38px; height:38px; border-radius:10px;
+  background: transparent; border:1px solid var(--border);
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; transition:all 0.15s; color: var(--text); position:relative; font-size:16px;
+}
+.icon-btn:hover { background: var(--bg-elev2); border-color: var(--accent); }
+.notif-dot { position:absolute; top:6px; right:6px; width:8px; height:8px; background:var(--danger); border-radius:50%; border:2px solid var(--bg-elev); }
+
+.mode-toggle { display:flex; background: var(--bg-elev2); border-radius:10px; padding:3px; gap:2px; border:1px solid var(--border); }
+.mode-btn { padding:6px 12px; border-radius:8px; border:none; font-family:inherit; font-size:12px; font-weight:700; cursor:pointer; background:transparent; color:var(--text-dim); transition:all 0.15s; }
+.mode-btn.active { background:var(--primary); color:#fff; }
+
+.content { padding:24px 32px; flex:1; max-width:100%; }
+
+/* GENERIC */
+.btn { padding:9px 18px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; border:none; font-family:inherit; transition:all 0.15s; display:inline-flex; align-items:center; gap:6px; }
+.btn-primary { background:linear-gradient(90deg,#0d1f3c,#1a3566); color:#fff; border:1px solid var(--accent); }
+.btn-primary:hover { transform:translateY(-1px); box-shadow:0 6px 16px rgba(245,158,11,0.2); }
+.btn-gold { background:linear-gradient(90deg,#f59e0b,#d97706); color:#0d1f3c; }
+.btn-gold:hover { transform:translateY(-1px); box-shadow:0 6px 16px rgba(245,158,11,0.35); }
+.btn-outline { background:transparent; border:1.5px solid var(--border); color:var(--text); }
+.btn-outline:hover { border-color:var(--accent); color:var(--accent); }
+.btn-success { background:var(--success); color:#fff; }
+.btn-warning { background:var(--warning); color:#0d1f3c; }
+.btn-danger { background:var(--danger); color:#fff; }
+.btn-sm { padding:6px 12px; font-size:12px; }
+.btn-xs { padding:4px 10px; font-size:11px; }
+
+.view { display:none; }
+.view.active { display:block; animation:fadeUp 0.25s ease; }
+@keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+.panel {
+  background: var(--card); border:1px solid var(--border);
+  border-radius:12px; overflow:hidden; margin-bottom:18px;
+}
+.panel-head { padding:13px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; background:var(--bg-elev2); }
+.panel-title { font-size:14px; font-weight:700; }
+.panel-body { padding:16px 18px; }
+
+/* WELCOME BANNER */
+.welcome-banner {
+  background: linear-gradient(135deg, #080f1e 0%, #0d1f3c 40%, #1a3566 100%);
+  color:#fff; border-radius:16px; padding:22px 26px; margin-bottom:18px;
+  position:relative; overflow:hidden; border:1px solid rgba(245,158,11,0.2);
+}
+.welcome-banner::before { content:'❄️'; position:absolute; right:28px; top:50%; transform:translateY(-50%) rotate(-10deg); font-size:100px; opacity:0.12; }
+.welcome-banner::after { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg,#f59e0b,transparent); }
+.wb-tag { font-size:10.5px; text-transform:uppercase; letter-spacing:0.8px; opacity:0.8; font-weight:700; position:relative; z-index:1; color:#f59e0b; }
+.wb-name { font-size:24px; font-weight:800; margin:4px 0; letter-spacing:-0.5px; position:relative; z-index:1; }
+.wb-msg { font-size:12.5px; opacity:0.88; max-width:580px; line-height:1.5; position:relative; z-index:1; }
+
+/* STATS */
+.stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:13px; margin-bottom:20px; }
+.stat-card {
+  background:var(--card); border:1px solid var(--border);
+  border-radius:12px; padding:16px; position:relative; overflow:hidden;
+  cursor:pointer; transition:all 0.15s;
+}
+.stat-card:hover { transform:translateY(-2px); box-shadow:0 8px 20px var(--shadow); }
+.stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+.stat-gold::before { background:linear-gradient(90deg,#f59e0b,#d97706); }
+.stat-primary::before { background:linear-gradient(90deg,#3b82f6,#2563eb); }
+.stat-success::before { background:var(--success); }
+.stat-warning::before { background:var(--warning); }
+.stat-danger::before { background:var(--danger); }
+.stat-info::before { background:var(--info); }
+.stat-label { font-size:10.5px; text-transform:uppercase; letter-spacing:0.4px; color:var(--text-dim); margin-bottom:5px; font-weight:600; }
+.stat-value { font-size:26px; font-weight:800; line-height:1; letter-spacing:-1px; }
+.stat-sub { font-size:11.5px; color:var(--text-dim); margin-top:5px; }
+.stat-icon { position:absolute; top:14px; right:14px; font-size:20px; opacity:0.25; }
+
+/* BOOKING CARDS */
+.booking-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:13px; }
+.booking-card {
+  background:var(--card); border:1.5px solid var(--border);
+  border-radius:12px; padding:15px; cursor:pointer; transition:all 0.2s; position:relative;
+}
+.booking-card:hover { transform:translateY(-2px); box-shadow:0 10px 24px var(--shadow); border-color:var(--accent); }
+.bc-head { display:flex; gap:10px; margin-bottom:10px; align-items:flex-start; }
+.bc-avatar { width:40px; height:40px; background:linear-gradient(135deg,#f59e0b,#d97706); color:#0d1f3c; border-radius:10px; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px; flex-shrink:0; }
+.bc-name { font-weight:700; font-size:14px; }
+.bc-id { font-size:10.5px; color:var(--text-dim); margin-top:1px; font-family:monospace; }
+.bc-service { font-size:12px; margin:8px 0; color:var(--text-dim); }
+.bc-meta { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+.bc-tag { font-size:10.5px; padding:2px 8px; border-radius:6px; font-weight:600; }
+
+/* TABLE */
+.tbl-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+thead { background:var(--bg-elev2); }
+th { padding:10px; text-align:left; font-size:11px; text-transform:uppercase; color:var(--text-dim); font-weight:700; border-bottom:1px solid var(--border); }
+td { padding:11px 10px; border-bottom:1px solid var(--border); }
+tr:last-child td { border-bottom:none; }
+tr:hover td { background:var(--bg-elev2); }
+
+/* STATUS BADGES */
+.status-badge { font-size:10.5px; padding:3px 9px; border-radius:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.3px; white-space:nowrap; display:inline-block; }
+.s-pending { background:var(--warning-soft); color:var(--warning); }
+.s-confirmed { background:var(--info-soft); color:var(--info); }
+.s-ongoing { background:rgba(245,158,11,0.15); color:#f59e0b; }
+.s-done { background:var(--success-soft); color:var(--success); }
+.s-cancelled { background:var(--danger-soft); color:var(--danger); }
+.s-warranty { background:rgba(139,92,246,0.15); color:#a78bfa; }
+
+/* TABS */
+.tabs { display:flex; gap:4px; border-bottom:2px solid var(--border); margin-bottom:18px; overflow-x:auto; }
+.tab { padding:10px 16px; cursor:pointer; font-size:13px; font-weight:600; color:var(--text-dim); border-bottom:2px solid transparent; margin-bottom:-2px; transition:all 0.15s; white-space:nowrap; }
+.tab:hover { color:var(--accent); }
+.tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+
+/* MODAL */
+.modal-bg { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:200; align-items:center; justify-content:center; padding:16px; overflow-y:auto; backdrop-filter:blur(4px); }
+.modal-bg.active { display:flex; }
+.modal { background:var(--card); border-radius:16px; max-width:760px; width:100%; max-height:92vh; overflow:hidden; display:flex; flex-direction:column; border:1px solid var(--border); }
+.modal.wide { max-width:1000px; }
+.modal-head { background: linear-gradient(135deg, #080f1e 0%, #0d1f3c 50%, #1a3566 100%); color:#fff; padding:18px 22px; display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid rgba(245,158,11,0.3); }
+.modal-title { font-size:16px; font-weight:800; }
+.modal-sub { font-size:11.5px; opacity:0.85; margin-top:2px; }
+.modal-close { background:rgba(245,158,11,0.15); border:1px solid rgba(245,158,11,0.3); color:#f59e0b; width:32px; height:32px; border-radius:50%; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center; }
+.modal-close:hover { background:rgba(245,158,11,0.3); }
+.modal-body { flex:1; overflow-y:auto; padding:20px 22px; }
+.modal-foot { padding:13px 22px; border-top:1px solid var(--border); background:var(--bg-elev2); display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
+
+/* TOOLBAR */
+.toolbar { display:flex; gap:10px; align-items:center; margin-bottom:14px; flex-wrap:wrap; }
+.toolbar input, .toolbar select {
+  padding:8px 12px; border:1.5px solid var(--border); border-radius:8px;
+  font-family:inherit; font-size:13px; outline:none;
+  background: var(--bg); color: var(--text); transition:all 0.15s;
+}
+.toolbar input:focus, .toolbar select:focus { border-color:var(--accent); }
+
+.empty { text-align:center; padding:40px 20px; color:var(--text-dim); }
+.empty-ic { font-size:44px; margin-bottom:10px; }
+
+/* CHARTS */
+.chart-wrap { background:var(--bg-elev2); border-radius:12px; padding:16px; margin-bottom:14px; }
+.chart-title { font-size:11.5px; font-weight:700; text-transform:uppercase; color:var(--text-dim); margin-bottom:12px; letter-spacing:0.4px; }
+.bar-chart { display:flex; align-items:flex-end; gap:5px; height:110px; }
+.bar-item { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; }
+.bar-fill { width:100%; border-radius:4px 4px 0 0; transition:height 0.6s cubic-bezier(.4,0,.2,1); min-width:12px; }
+.bar-label { font-size:9px; color:var(--text-dim); text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+.bar-val { font-size:9.5px; font-weight:700; }
+.donut-wrap { display:flex; align-items:center; gap:16px; }
+.donut-legend { flex:1; display:flex; flex-direction:column; gap:6px; }
+.legend-item { display:flex; align-items:center; gap:8px; font-size:12px; }
+.legend-dot { width:10px; height:10px; border-radius:3px; flex-shrink:0; }
+
+/* CONFIRM */
+.confirm-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:9999;
+  display:flex; align-items:center; justify-content:center; padding:20px;
+  animation: fadeIn 0.15s ease;
+}
+.confirm-box {
+  background:var(--bg-elev); border:1px solid var(--border); border-radius:16px;
+  padding:26px 26px 18px; max-width:400px; width:100%;
+  box-shadow:0 24px 60px var(--shadow);
+  animation: slideUp 0.15s ease;
+}
+.confirm-icon { font-size:36px; margin-bottom:10px; text-align:center; }
+.confirm-title { font-size:16px; font-weight:800; margin-bottom:8px; text-align:center; }
+.confirm-msg { font-size:13px; color:var(--text-dim); line-height:1.6; text-align:center; margin-bottom:18px; }
+.confirm-btns { display:flex; gap:10px; justify-content:center; }
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+@keyframes slideUp { from{transform:translateY(10px);opacity:0} to{transform:translateY(0);opacity:1} }
+
+/* TOAST */
+.toast-container { position:fixed; top:20px; right:20px; z-index:9999; display:flex; flex-direction:column; gap:8px; }
+.toast {
+  background:var(--bg-elev); border:1px solid var(--border); border-radius:12px;
+  padding:12px 16px; min-width:260px; max-width:340px;
+  box-shadow:0 8px 24px var(--shadow);
+  animation:slideInRight 0.25s ease; font-size:13px; font-weight:500;
+  display:flex; align-items:center; gap:10px;
+}
+.toast.success { border-left:4px solid var(--success); }
+.toast.error { border-left:4px solid var(--danger); }
+.toast.info { border-left:4px solid var(--accent); }
+.toast.warning { border-left:4px solid var(--warning); }
+@keyframes slideInRight { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
+
+/* ACTIVITY LOG */
+.log-item { display:flex; gap:12px; padding:10px 0; border-bottom:1px solid var(--border); }
+.log-item:last-child { border-bottom:none; }
+.log-icon { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; }
+.log-text { font-size:12.5px; line-height:1.5; flex:1; }
+.log-time { font-size:11px; color:var(--text-dim); white-space:nowrap; }
+
+/* INFO ROW */
+.info-row { display:flex; gap:8px; margin-bottom:8px; font-size:13px; }
+.info-label { font-weight:600; color:var(--text-dim); min-width:110px; }
+.info-val { flex:1; }
+
+/* COMPLAINT/WARRANTY */
+.complaint-card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:10px; border-left:4px solid var(--info); cursor:pointer; transition:all 0.15s; }
+.complaint-card:hover { transform:translateX(2px); box-shadow:0 4px 12px var(--shadow); }
+.complaint-card.warranty { border-left-color:var(--success); }
+.complaint-card.urgent { border-left-color:var(--danger); }
+.cc-head { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px; gap:8px; flex-wrap:wrap; }
+.cc-title { font-weight:700; font-size:13.5px; }
+.cc-meta { font-size:11px; color:var(--text-dim); margin-top:3px; }
+
+/* QUICK ACTIONS */
+.ref-card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px; cursor:pointer; transition:all 0.15s; }
+.ref-card:hover { border-color:var(--accent); transform:translateY(-2px); box-shadow:0 6px 16px var(--shadow); }
+.ref-icon { font-size:26px; margin-bottom:8px; }
+.ref-title { font-weight:700; font-size:13.5px; margin-bottom:3px; }
+.ref-sub { font-size:11.5px; color:var(--text-dim); line-height:1.4; }
+
+/* MOBILE */
+.menu-btn {
+  display:none; background:transparent; border:1px solid var(--border);
+  width:38px; height:38px; border-radius:10px;
+  align-items:center; justify-content:center;
+  cursor:pointer; color:var(--text); font-size:18px; margin-right:8px;
+}
+.menu-btn:hover { background:var(--bg-elev2); border-color:var(--accent); }
+.sidebar-backdrop {
+  display:none; position:fixed; inset:0;
+  background:rgba(0,0,0,0.55); z-index:48; backdrop-filter:blur(1px);
+}
+
+@media(max-width:768px){
+  .menu-btn { display:flex; }
+  .sidebar { transform:translateX(-100%); width:240px; }
+  .sidebar.mobile-open { transform:translateX(0); }
+  .sidebar-backdrop.active { display:block; }
+  .main { margin-left:0 !important; }
+  .content { padding:16px 18px; }
+  .stats-grid { grid-template-columns:repeat(2,1fr); }
+  .topbar { padding:0 16px; }
+  #sbCollapseBtn { display:none; }
+}
+
+/* PDF RECEIPT PREVIEW */
+.receipt-preview { background:#fff; color:#000; border-radius:10px; padding:24px; font-size:12px; line-height:1.6; }
+.receipt-header { text-align:center; border-bottom:2px solid #0d1f3c; padding-bottom:12px; margin-bottom:16px; }
+.receipt-logo-text { font-size:22px; font-weight:800; color:#0d1f3c; }
+.receipt-logo-text span { color:#f59e0b; }
+.receipt-sub { font-size:11px; color:#666; }
+.receipt-id { font-family:monospace; background:#f1f5f9; padding:4px 10px; border-radius:6px; display:inline-block; margin:8px 0; font-size:11px; }
+.receipt-table { width:100%; border-collapse:collapse; margin:12px 0; }
+.receipt-table th { background:#0d1f3c; color:#fff; padding:6px 10px; font-size:11px; text-align:left; }
+.receipt-table td { padding:6px 10px; border-bottom:1px solid #e2e8f0; }
+.receipt-total { text-align:right; font-size:14px; font-weight:800; color:#0d1f3c; margin-top:10px; }
+.receipt-footer { border-top:1px solid #e2e8f0; padding-top:10px; margin-top:14px; font-size:10.5px; color:#666; text-align:center; }
+
+/* NOTIF PANEL */
+#notifPanel {
+  display:none; position:absolute; top:calc(100% + 8px); right:0;
+  background:var(--card); border:1px solid var(--border); border-radius:14px;
+  width:300px; max-height:380px; overflow-y:auto;
+  box-shadow:0 12px 40px var(--shadow); z-index:100;
+  animation: slideUp 0.18s ease;
+}
+#notifPanel.show { display:block; }
+.notif-head { padding:12px 16px; border-bottom:1px solid var(--border); font-size:13px; font-weight:700; display:flex; justify-content:space-between; align-items:center; }
+.notif-item { padding:10px 16px; border-bottom:1px solid var(--border); cursor:pointer; transition:all 0.1s; }
+.notif-item:hover { background:var(--bg-elev2); }
+.notif-item.unread { border-left:3px solid var(--accent); }
+.notif-msg { font-size:12.5px; line-height:1.45; }
+.notif-time { font-size:10.5px; color:var(--text-dim); margin-top:3px; }
+
+/* FORM GRID */
+.form-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+@media(max-width:600px){ .form-grid{grid-template-columns:1fr} }
+.form-full { grid-column:1/-1; }
+
+/* SECTION DIVIDER */
+.sec-divider { font-size:11px; text-transform:uppercase; letter-spacing:0.6px; color:var(--text-dim); font-weight:700; padding:8px 0; border-bottom:1px solid var(--border); margin-bottom:14px; }
+
+/* BACK TO TOP */
+#backToTopBtn {
+  display:none; position:fixed; bottom:24px; right:24px; z-index:800;
+  width:42px; height:42px; background:linear-gradient(135deg,#f59e0b,#d97706);
+  color:#0d1f3c; border-radius:50%; align-items:center; justify-content:center;
+  cursor:pointer; box-shadow:0 4px 16px rgba(245,158,11,0.4); font-size:18px;
+  border:none; transition:all 0.2s; font-weight:700;
+}
+#backToTopBtn:hover { transform:translateY(-2px); }
+</style>
+</head>
+<body>
+
+<div class="deco-bg deco-1">❄️</div>
+<div class="deco-bg deco-2">🔧</div>
+<div class="toast-container" id="toastContainer"></div>
+<button id="backToTopBtn" onclick="scrollToTop()" title="Back to top">↑</button>
+
+<div id="appContainer">
+
+<!-- ============ LOGIN ============ -->
+<div id="loginScreen">
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="login-left">
+        <div>
+          <div class="ll-brand">DJ-<span>CE</span></div>
+          <div class="ll-tag">❄️ Service Portal · Est. Calumpit, Bulacan</div>
+        </div>
+        <div class="ll-welcome">
+          <h2>Manage your jobs.<br>Track your team.<br>Grow your business.</h2>
+          <p>Internal portal for DJ-CE Aircon & Electrical Services — bookings, job management, receipts, and reports.</p>
+          <div class="feat-list">
+            <div class="feat-item"><span class="ic">📋</span> Booking & Job Management</div>
+            <div class="feat-item"><span class="ic">📊</span> Revenue & Performance Charts</div>
+            <div class="feat-item"><span class="ic">📄</span> Service Receipts & Job Orders</div>
+            <div class="feat-item"><span class="ic">🛡️</span> Warranty & Complaint Tracker</div>
+          </div>
+        </div>
+        <div class="ll-copy">© 2025 DJ-CE Aircon & Electrical Services · Calumpit, Bulacan</div>
+      </div>
+
+      <div class="login-right">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+          <div class="login-head" style="margin:0">
+            <h1>Welcome back! 👋</h1>
+            <p>Sign in to your DJ-CE portal</p>
+          </div>
+          <button class="icon-btn" onclick="toggleTheme()" id="themeBtn" title="Toggle theme">🌙</button>
+        </div>
+
+        <div class="err-msg" id="errMsg"></div>
+
+        <div class="field">
+          <label>Username</label>
+          <input type="text" id="username" placeholder="Enter your username" autocomplete="username">
+        </div>
+        <div class="field" style="position:relative">
+          <label>Password</label>
+          <div style="position:relative">
+          <input type="password" id="password" placeholder="Enter your password" autocomplete="current-password" onkeydown="if(event.key==='Enter')handleLogin()" style="width:100%;padding:11px 44px 11px 14px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-family:inherit;font-size:14px;outline:none;">
+          <button type="button" onclick="togglePwVis()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:18px;color:var(--text-dim);padding:4px;" title="Show/hide password" title="Show/hide">👁️</button>
+          </div>
+        </div>
+
+        <button class="btn-login" id="loginBtn" onclick="handleLogin()">Sign In →</button>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PORTAL APP ============ -->
+<!-- FORCED PASSWORD CHANGE -->
+<div id="forcedPwScreen" style="display:none;min-height:100vh;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:20px;max-width:420px;width:100%;padding:40px 36px;box-shadow:0 24px 60px var(--shadow);">
+    <div style="text-align:center;margin-bottom:22px">
+      <div style="font-size:48px;margin-bottom:10px">🔑</div>
+      <div style="font-size:20px;font-weight:800" id="fpwTitle">Set Your Password</div>
+      <div style="font-size:13px;color:var(--text-dim);margin-top:6px;line-height:1.5" id="fpwMsg"></div>
+    </div>
+    <div style="background:var(--warning-soft);border:1px solid var(--warning);border-radius:8px;padding:10px 13px;font-size:12px;color:var(--warning);margin-bottom:16px">
+      ⚠️ Passwords expire every <strong>90 days</strong>. Choose something secure.
+    </div>
+    <div id="fpwErr" style="display:none;background:var(--danger-soft);color:var(--danger);padding:9px 12px;border-radius:8px;font-size:12px;margin-bottom:12px;border-left:3px solid var(--danger)"></div>
+    <div class="field" style="margin-bottom:12px"><label style="display:block;font-size:11px;font-weight:700;color:var(--text-dim);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px">New Password</label>
+      <input type="password" id="fpw_new" placeholder="At least 6 characters" style="width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-family:inherit;font-size:14px;outline:none;">
+    </div>
+    <div class="field" style="margin-bottom:18px"><label style="display:block;font-size:11px;font-weight:700;color:var(--text-dim);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px">Confirm Password</label>
+      <input type="password" id="fpw_confirm" placeholder="Re-enter password" onkeydown="if(event.key==='Enter')submitForcedPw()" style="width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-family:inherit;font-size:14px;outline:none;">
+    </div>
+    <button onclick="submitForcedPw()" style="width:100%;padding:13px;background:linear-gradient(90deg,#0d1f3c,#1a3566);border:2px solid var(--accent);color:#fff;border-radius:10px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;">
+      Set Password & Continue →
+    </button>
+    <div style="text-align:center;margin-top:14px">
+      <span style="font-size:12px;color:var(--text-dim);cursor:pointer" onclick="session=null;localStorage.removeItem('djce_session');document.getElementById('forcedPwScreen').style.display='none';document.getElementById('loginScreen').style.display='';">← Back to Login</span>
+    </div>
+  </div>
+</div>
+
+<div id="portalApp">
+
+<div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
+
+<aside class="sidebar" id="sidebar">
+  <div class="sb-logo">
+    <div class="sb-brand">DJ-<span>CE</span></div>
+    <div class="sb-tag"><span>❄️</span> Service Portal</div>
+    <div class="sb-collapse-logo">❄️</div>
+  </div>
+  <nav class="sb-nav" id="sidebarNav">
+    <!-- dynamically filled by role -->
+  </nav>
+  <div class="sb-foot">
+    <button id="sbCollapseBtn" onclick="toggleSidebarCollapse()">
+      <span id="sbCollapseTxt">← Collapse</span>
+    </button>
+    <div class="user-card" onclick="toggleUserMenu()" id="userCard" style="position:relative">
+      <div class="user-avatar" id="userAvatar">?</div>
+      <div class="user-info">
+        <div class="user-name" id="userDisplayName">User</div>
+        <div class="user-role" id="userDisplayRole">Role</div>
+      </div>
+      <div class="user-logout-icon">⋯</div>
+    </div>
+    <!-- User mini menu -->
+    <div id="userMenu" style="display:none;position:absolute;bottom:100%;left:0;right:0;background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;margin-bottom:6px;overflow:hidden;box-shadow:0 8px 24px var(--shadow);z-index:100">
+      <div onclick="switchView('settings');closeUserMenu()" style="padding:11px 14px;cursor:pointer;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;transition:background .15s" onmouseover="this.style.background='var(--bg-elev2)'" onmouseout="this.style.background=''">⚙️ Settings & Account</div>
+      <div style="height:1px;background:var(--border)"></div>
+      <div onclick="handleLogout()" style="padding:11px 14px;cursor:pointer;font-size:13px;font-weight:600;color:var(--danger);display:flex;align-items:center;gap:8px;transition:background .15s" onmouseover="this.style.background='var(--bg-elev2)'" onmouseout="this.style.background=''">🚪 Sign Out</div>
+    </div>
+  </div>
+</aside>
+
+<div class="main">
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="menu-btn" onclick="toggleSidebar()">☰</button>
+      <div>
+        <div class="page-title" id="pageTitle">Dashboard</div>
+        <div class="page-sub" id="pageSub">DJ-CE Service Portal</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div style="position:relative">
+        <button class="icon-btn" onclick="toggleNotif(event)" title="Notifications">
+          🔔<span class="notif-dot" id="notifDot" style="display:none"></span>
+        </button>
+        <div id="notifPanel">
+          <div class="notif-head"><span>Notifications</span><span style="font-size:11px;color:var(--text-dim);cursor:pointer" onclick="markAllRead()">Mark all read</span></div>
+          <div id="notifList"><div class="empty" style="padding:20px">No notifications</div></div>
+        </div>
+      </div>
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="btnLight" onclick="setTheme('light')">☀️</button>
+        <button class="mode-btn" id="btnDark" onclick="setTheme('dark')">🌙</button>
+      </div>
+      <button class="btn btn-gold btn-sm" onclick="manualSync()" id="syncBtn">⟳ Sync</button>
+      <button class="btn btn-outline btn-sm" id="pwaInstallBtn" style="display:none" onclick="installPWA()" title="Install as app">📲 Install App</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <!-- VIEWS -->
+    <div id="view-dashboard" class="view active"></div>
+    <div id="view-bookings" class="view"></div>
+    <div id="view-jobs" class="view"></div>
+    <div id="view-clients" class="view"></div>
+    <div id="view-followup" class="view"></div>
+    <div id="view-schedule" class="view"></div>
+    <div id="view-complaints" class="view"></div>
+    <div id="view-receipts" class="view"></div>
+    <div id="view-revenue" class="view"></div>
+    <div id="view-reports" class="view"></div>
+    <div id="view-activity" class="view"></div>
+    <div id="view-settings" class="view"></div>
+    <div id="view-my-jobs" class="view"></div>
+  </div>
+</div>
+</div>
+
+</div><!-- end appContainer -->
+
+<!-- ============ MODALS ============ -->
+<!-- Client Detail Modal -->
+<div class="modal-bg" id="clientModal"><div class="modal wide">
+  <div class="modal-head"><div><div class="modal-title" id="clmTitle">Client</div><div class="modal-sub" id="clmSub"></div></div><button class="modal-close" onclick="closeModal('clientModal')">✕</button></div>
+  <div class="modal-body" id="clmBody"></div>
+  <div class="modal-foot" id="clmFoot"></div>
+</div></div>
+
+<!-- Add/Edit Modal -->
+<div class="modal-bg" id="editModal"><div class="modal wide">
+  <div class="modal-head"><div><div class="modal-title" id="emTitle">New Entry</div><div class="modal-sub" id="emSub"></div></div><button class="modal-close" onclick="closeModal('editModal')">✕</button></div>
+  <div class="modal-body" id="emBody"></div>
+  <div class="modal-foot" id="emFoot"></div>
+</div></div>
+
+
+<!-- Booking Detail Modal -->
+<div class="modal-bg" id="bookingModal">
+  <div class="modal wide">
+    <div class="modal-head">
+      <div><div class="modal-title" id="bmTitle">Booking Details</div><div class="modal-sub" id="bmSub"></div></div>
+      <button class="modal-close" onclick="closeModal('bookingModal')">✕</button>
+    </div>
+    <div class="modal-body" id="bmBody"></div>
+    <div class="modal-foot" id="bmFoot"></div>
+  </div>
+</div>
+
+<!-- Job Order / Receipt Modal -->
+<div class="modal-bg" id="receiptModal">
+  <div class="modal wide">
+    <div class="modal-head">
+      <div><div class="modal-title">📄 Service Receipt / Job Order</div><div class="modal-sub" id="rmSub"></div></div>
+      <button class="modal-close" onclick="closeModal('receiptModal')">✕</button>
+    </div>
+    <div class="modal-body" id="rmBody"></div>
+    <div class="modal-foot">
+      <button class="btn btn-outline btn-sm" onclick="closeModal('receiptModal')">Close</button>
+      <button class="btn btn-primary btn-sm" onclick="printReceipt()">🖨️ Print</button>
+      <button class="btn btn-gold btn-sm" onclick="downloadReceiptPDF()">⬇️ Download PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- Complaint Modal -->
+<div class="modal-bg" id="complaintModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div><div class="modal-title" id="cmTitle">Complaint / Warranty</div><div class="modal-sub" id="cmSub"></div></div>
+      <button class="modal-close" onclick="closeModal('complaintModal')">✕</button>
+    </div>
+    <div class="modal-body" id="cmBody"></div>
+    <div class="modal-foot" id="cmFoot"></div>
+  </div>
+</div>
+
+<!-- New/Edit Booking Modal -->
+<div class="modal-bg" id="editBookingModal">
+  <div class="modal wide">
+    <div class="modal-head">
+      <div><div class="modal-title" id="ebTitle">New Booking</div><div class="modal-sub">Fill in client and service details</div></div>
+      <button class="modal-close" onclick="closeModal('editBookingModal')">✕</button>
+    </div>
+    <div class="modal-body" id="ebBody"></div>
+    <div class="modal-foot">
+      <button class="btn btn-outline btn-sm" onclick="closeModal('editBookingModal')">Cancel</button>
+      <button class="btn btn-gold btn-sm" onclick="saveBooking()">💾 Save Booking</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===========================
+   DATA & CONFIG
+=========================== */
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxHttRvS4rEsoFCnHBCQyVrmdpFcCDcjdxKfQI4H-M6wP5fIoNgZrZ37ikPgcytVKoiNQ/exec';
+const APPS_URL = APPS_SCRIPT_URL;
+
+// ACCOUNTS — loaded from localStorage (seeded from defaults on first run)
+const DEFAULT_ACCOUNTS = {
+  owner:  { username:'owner',  password:'djce2025',  name:'Owner',             role:'owner', avatar:'OW', lastPwChange: null, forceChange: true },
+  admin:  { username:'admin',  password:'admin2025', name:'Admin/Dispatcher',  role:'admin', avatar:'AD', lastPwChange: null, forceChange: true },
+  tech1:  { username:'tech1',  password:'tech2025',  name:'Papa (Senior Tech)',role:'tech',  avatar:'PT', lastPwChange: null, forceChange: true },
+  tech2:  { username:'tech2',  password:'tech2025',  name:'Helper 1',          role:'tech',  avatar:'H1', lastPwChange: null, forceChange: true },
+  tech3:  { username:'tech3',  password:'tech2025',  name:'Helper 2',          role:'tech',  avatar:'H2', lastPwChange: null, forceChange: true },
+};
+let USERS = {};
+
+function loadAccounts() {
+  try {
+    const stored = localStorage.getItem('djce_accounts');
+    USERS = stored ? JSON.parse(stored) : JSON.parse(JSON.stringify(DEFAULT_ACCOUNTS));
+    if (!stored) localStorage.setItem('djce_accounts', JSON.stringify(USERS));
+  } catch(e) { USERS = JSON.parse(JSON.stringify(DEFAULT_ACCOUNTS)); }
+}
+
+function saveAccounts() {
+  localStorage.setItem('djce_accounts', JSON.stringify(USERS));
+}
+
+function isPwExpired(acc) {
+  if (!acc.lastPwChange) return true;
+  const days = (new Date() - new Date(acc.lastPwChange)) / (1000*60*60*24);
+  return days >= 90;
+}
+
+const TECHNICIANS = ['Papa (Senior Tech)', 'Helper 1', 'Helper 2'];
+const SERVICES = ['Aircon Cleaning – Window Type','Aircon Cleaning – Split Type','AWM Deep Cleaning','Aircon Installation','Aircon Relocation','Aircon Dismantle','Freon Charging','Breaker Installation','Aircon Bracket','Electrical Work','Plumbing'];
+const SERVICE_AREAS = ['Calumpit','Malolos','Balagtas','Guiguinto','Bocaue','Pulilan','Plaridel','San Miguel','Apalit','Sto. Tomas','Angeles','San Fernando'];
+
+let session = null;
+let BOOKINGS = {};
+let COMPLAINTS = [];
+let ACTIVITY_LOG = [];
+let NOTIFS = [];
+let currentReceiptBooking = null;
+
+/* ===========================
+   INIT / THEME
+=========================== */
+function init() {
+  applyTheme(localStorage.getItem('djce_theme') || 'dark');
+  loadAccounts();
+  const saved = localStorage.getItem('djce_session');
+  if (saved) {
+    try { session = JSON.parse(saved); showPortal(); } catch(e) { /* ignore */ }
+  }
+  loadLocalData();
+  window.onclick = (e) => {
+    if (!e.target.closest('#notifPanel') && !e.target.closest('.icon-btn')) {
+      document.getElementById('notifPanel')?.classList.remove('show');
+    }
+    if (!e.target.closest('#userCard') && !e.target.closest('#userMenu')) {
+      closeUserMenu();
+    }
+  };
+  window.onscroll = () => {
+    const btn = document.getElementById('backToTopBtn');
+    if (btn) btn.style.display = window.scrollY > 300 ? 'flex' : 'none';
+  };
+}
+
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  document.getElementById('themeBtn').textContent = t==='dark'?'☀️':'🌙';
+  document.getElementById('btnLight')?.classList.toggle('active', t==='light');
+  document.getElementById('btnDark')?.classList.toggle('active', t==='dark');
+  localStorage.setItem('djce_theme', t);
+}
+
+function setTheme(t) { applyTheme(t); }
+function toggleTheme() { applyTheme(document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark'); }
+
+function fill(u, p) {
+  document.getElementById('username').value = u;
+  document.getElementById('password').value = p;
+}
+
+function togglePwVis() {
+  const inp = document.getElementById('password');
+  inp.type = inp.type==='password' ? 'text' : 'password';
+}
+
+/* ===========================
+   AUTH
+=========================== */
+function handleLogin() {
+  const u = document.getElementById('username').value.trim().toLowerCase();
+  const p = document.getElementById('password').value;
+  const btn = document.getElementById('loginBtn');
+
+  if (!u || !p) { showErr('Please enter your username and password.'); return; }
+
+  const user = USERS[u];
+  if (!user || user.password !== p) { showErr('Invalid username or password.'); return; }
+
+  btn.textContent = 'Signing in...'; btn.disabled = true;
+  setTimeout(() => {
+    session = { username: u, name: user.name, role: user.role, avatar: user.avatar };
+    localStorage.setItem('djce_session', JSON.stringify(session));
+    logActivity('🔐', `${session.name} signed in`, 'auth');
+    btn.textContent = 'Sign In →'; btn.disabled = false;
+    // Check forced change or 90-day expiry
+    if (user.forceChange || isPwExpired(user)) {
+      showForcedPwChange(user.forceChange);
+      return;
+    }
+    showPortal();
+  }, 500);
+}
+
+function showErr(msg) {
+  const e = document.getElementById('errMsg');
+  e.textContent = msg; e.classList.add('show');
+  setTimeout(() => e.classList.remove('show'), 4000);
+}
+
+function handleLogout() {
+  if (!confirm('Are you sure you want to sign out?')) return;
+  try { logActivity('🚪', session.name + ' logged out', 'logout'); } catch(e) {}
+  session = null;
+  localStorage.removeItem('djce_session');
+  document.body.classList.remove('portal-active');
+  document.getElementById('loginScreen').style.display='';
+  document.getElementById('portalApp').style.display='none';
+}
+
+function showPortal() {
+  document.body.classList.add('portal-active');
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('portalApp').style.display='flex';
+  document.getElementById('userAvatar').textContent = session.avatar;
+  document.getElementById('userDisplayName').textContent = session.name;
+  document.getElementById('userDisplayRole').textContent = getRoleLabel(session.role);
+  buildNav();
+  switchView('dashboard');
+  fetchFromSheets();
+}
+
+function getRoleLabel(r) {
+  return r==='owner'?'👑 Owner':r==='admin'?'🛠️ Admin/Dispatcher':'👷 Technician';
+}
+
+/* ===========================
+   NAV
+=========================== */
+function buildNav() {
+  const nav = document.getElementById('sidebarNav');
+  const r = session.role;
+  const isOwner = r==='owner';
+  const isAdmin = r==='admin';
+  const isSales = r==='sales'||r==='marketing';
+  const isSrTech = r==='sr_tech';
+  const isTech = r==='jr_tech'||r==='helper'||r==='others';
+  const isStaff = isOwner||isAdmin;
+  const dueCount = getDueClients().length;
+  const followCount = getFollowUpDue().length;
+  const alertBadge = dueCount+followCount>0 ? `<span class="nav-badge nav-badge-warn">${dueCount+followCount}</span>` : '';
+  let h = '';
+
+  if (isStaff) {
+    h += `<div class="nav-sec">Main</div>
+    <div class="nav-item" data-tip="Dashboard" onclick="switchView('dashboard',event)"><span class="ic">📊</span><span class="nav-label">Dashboard</span></div>
+    <div class="nav-item" data-tip="Bookings" onclick="switchView('bookings',event)"><span class="ic">📋</span><span class="nav-label">All Bookings</span><span class="nav-badge" id="navPending" style="display:none">0</span></div>
+    <div class="nav-item" data-tip="Job Management" onclick="switchView('jobs',event)"><span class="ic">🔧</span><span class="nav-label">Job Management</span></div>
+    <div class="nav-sec">Clients</div>
+    <div class="nav-item" data-tip="Clients" onclick="switchView('clients',event)"><span class="ic">👥</span><span class="nav-label">Client Records</span></div>
+    <div class="nav-item" data-tip="Follow-up Center" onclick="switchView('followup',event)"><span class="ic">🔔</span><span class="nav-label">Follow-up Center</span>${alertBadge}</div>
+    <div class="nav-item" data-tip="Schedule" onclick="switchView('schedule',event)"><span class="ic">📅</span><span class="nav-label">Schedule</span></div>
+    <div class="nav-sec">Documents</div>
+    <div class="nav-item" data-tip="Service Receipts" onclick="switchView('receipts',event)"><span class="ic">🧾</span><span class="nav-label">Service Receipts</span></div>
+    <div class="nav-item" data-tip="Complaints & Warranty" onclick="switchView('complaints',event)"><span class="ic">🛡️</span><span class="nav-label">Complaints & Warranty</span></div>`;
+  }
+
+  if (isOwner) {
+    h += `<div class="nav-sec">Reports</div>
+    <div class="nav-item" data-tip="Revenue" onclick="switchView('revenue',event)"><span class="ic">💰</span><span class="nav-label">Revenue</span></div>
+    <div class="nav-item" data-tip="Reports" onclick="switchView('reports',event)"><span class="ic">📈</span><span class="nav-label">Reports & Charts</span></div>`;
+  }
+
+  if (isSales) {
+    h = `<div class="nav-sec">Main</div>
+    <div class="nav-item" data-tip="Bookings" onclick="switchView('bookings',event)"><span class="ic">📋</span><span class="nav-label">Bookings</span></div>
+    <div class="nav-item" data-tip="Clients" onclick="switchView('clients',event)"><span class="ic">👥</span><span class="nav-label">Clients</span></div>`;
+  }
+
+  if (isSrTech) {
+    h = `<div class="nav-sec">My Work</div>
+    <div class="nav-item" data-tip="My Jobs" onclick="switchView('my-jobs',event)"><span class="ic">🔧</span><span class="nav-label">My Assigned Jobs</span></div>
+    <div class="nav-item" data-tip="Schedule" onclick="switchView('schedule',event)"><span class="ic">📅</span><span class="nav-label">Schedule</span></div>
+    <div class="nav-item" data-tip="Clients" onclick="switchView('clients',event)"><span class="ic">👥</span><span class="nav-label">Clients</span></div>`;
+  }
+
+  if (isTech) {
+    h = `<div class="nav-sec">My Work</div>
+    <div class="nav-item" data-tip="My Jobs" onclick="switchView('my-jobs',event)"><span class="ic">🔧</span><span class="nav-label">My Assigned Jobs</span></div>`;
+  }
+
+  h += `<div class="nav-sec">System</div>
+  <div class="nav-item" data-tip="Activity Log" onclick="switchView('activity',event)"><span class="ic">📜</span><span class="nav-label">Activity Log</span></div>
+  <div class="nav-item" data-tip="Settings" onclick="switchView('settings',event)"><span class="ic">⚙️</span><span class="nav-label">Settings & Account</span></div>`;
+
+  nav.innerHTML = h;
+  updateNavBadges();
+}
+
+function updateNavBadges() {
+  const pending = Object.values(BOOKINGS).filter(b=>b.status==='Pending').length;
+  const el = document.getElementById('navPending');
+  if (el) { el.textContent = pending; el.style.display = pending ? '' : 'none'; }
+}
+
+/* ===========================
+   VIEW SWITCHING
+=========================== */
+function switchView(name, ev) {
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  const view = document.getElementById('view-'+name);
+  if (view) { view.classList.add('active'); view.innerHTML = renderView(name); }
+  if (ev) ev.currentTarget.classList.add('active');
+  updatePageTitle(name);
+  window.scrollTo(0,0);
+}
+
+function updatePageTitle(name) {
+  const titles = {
+    dashboard:'Dashboard', bookings:'All Bookings', jobs:'Job Management',
+    clients:'Clients', schedule:'Schedule', complaints:'Complaints & Warranty',
+    receipts:'Service Receipts', revenue:'Revenue', reports:'Reports & Charts',
+    activity:'Activity Log', 'my-jobs':'My Assigned Jobs', settings:'Settings & Account',settings:'Settings & Account'
+  };
+  document.getElementById('pageTitle').textContent = titles[name] || name;
+}
+
+function renderView(name) {
+  switch(name) {
+    case 'dashboard': return session.role==='tech' ? renderTechDash() : renderDashboard();
+    case 'bookings': return renderBookings();
+    case 'clients': if(session.role==='sales'||session.role==='marketing'||session.role==='sr_tech') return renderClients(); return renderClients();
+    case 'jobs': return renderJobs();
+    case 'clients': return renderClients();
+    case 'followup': return renderFollowup();
+    case 'schedule': return renderSchedule();
+    case 'schedule': return renderSchedule();
+    case 'complaints': return renderComplaints();
+    case 'receipts': return renderReceipts();
+    case 'revenue': return renderRevenue();
+    case 'reports': return renderReports();
+    case 'activity': return renderActivity();
+    case 'settings': return renderSettings();
+    case 'my-jobs': return session.role==='sr_tech'?renderTechDash():renderMyJobs();
+    default: return '<div class="empty"><div class="empty-ic">🚧</div>Coming soon</div>';
+  }
+}
+
+/* ===========================
+   DASHBOARD
+=========================== */
+function renderDashboard() {
+  const bks = Object.values(BOOKINGS);
+  const pending = bks.filter(b=>b.status==='Pending').length;
+  const confirmed = bks.filter(b=>b.status==='Confirmed').length;
+  const done = bks.filter(b=>b.status==='Done').length;
+  const thisMonth = bks.filter(b=>isThisMonth(b.date)).length;
+  const totalRevenue = bks.filter(b=>b.status==='Done').reduce((s,b)=>s+(parseFloat(b.amount)||0),0);
+  const hr = new Date().getHours();
+  const greet = hr<12?'Good morning':'hr<18'?'Good afternoon':'Good evening';
+
+  return `<div class="welcome-banner">
+    <div class="wb-tag">❄️ DJ-CE Service Portal · ${session.role==='owner'?'Owner Dashboard':'Admin Dashboard'}</div>
+    <div class="wb-name">${hr<12?'Good morning':'Good afternoon'}, ${session.name.split(' ')[0]}! 💼</div>
+    <div class="wb-msg">You have <strong>${pending} pending bookings</strong> waiting for action and <strong>${thisMonth} jobs this month</strong>. Here's your overview.</div>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card stat-warning" onclick="switchView('bookings')">
+      <div class="stat-icon">⏳</div><div class="stat-label">Pending Bookings</div>
+      <div class="stat-value" style="color:var(--warning)">${pending}</div>
+      <div class="stat-sub">Need assignment</div>
+    </div>
+    <div class="stat-card stat-info" onclick="switchView('bookings')">
+      <div class="stat-icon">✅</div><div class="stat-label">Confirmed / Ongoing</div>
+      <div class="stat-value" style="color:var(--info)">${confirmed}</div>
+      <div class="stat-sub">Scheduled jobs</div>
+    </div>
+    <div class="stat-card stat-success" onclick="switchView('jobs')">
+      <div class="stat-icon">🏆</div><div class="stat-label">Completed Jobs</div>
+      <div class="stat-value" style="color:var(--success)">${done}</div>
+      <div class="stat-sub">All time</div>
+    </div>
+    <div class="stat-card stat-gold" onclick="switchView('revenue')">
+      <div class="stat-icon">💰</div><div class="stat-label">Total Revenue</div>
+      <div class="stat-value" style="color:var(--accent)">₱${totalRevenue.toLocaleString()}</div>
+      <div class="stat-sub">From completed jobs</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px">
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">📊 Jobs This Month</div></div>
+      <div class="panel-body">${renderMonthlyChart()}</div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">🔧 Service Breakdown</div></div>
+      <div class="panel-body">${renderServiceChart()}</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px">
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">🆕 Recent Bookings</div><button class="btn btn-sm btn-outline" onclick="switchView('bookings')">View all</button></div>
+      <div style="padding:14px">${renderRecentBookings()}</div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">⚡ Quick Actions</div></div>
+      <div class="panel-body" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="ref-card" onclick="openNewBooking()"><div class="ref-icon">➕</div><div class="ref-title">New Booking</div><div class="ref-sub">Add walk-in or call-in</div></div>
+        <div class="ref-card" onclick="openNewClient()"><div class="ref-icon">👤</div><div class="ref-title">Add Client</div><div class="ref-sub">Import old client records</div></div>
+        <div class="ref-card" onclick="switchView('schedule')"><div class="ref-icon">📅</div><div class="ref-title">Schedule</div><div class="ref-sub">View today's jobs</div></div>
+        <div class="ref-card" onclick="switchView('receipts')"><div class="ref-icon">🧾</div><div class="ref-title">Generate Receipt</div><div class="ref-sub">Service receipt / JO</div></div>
+        <div class="ref-card" onclick="switchView('complaints')"><div class="ref-icon">🛡️</div><div class="ref-title">Complaints</div><div class="ref-sub">${COMPLAINTS.filter(c=>c.status==='Open').length} open cases</div></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderTechDash() {
+  const myJobs = Object.values(BOOKINGS).filter(b=>b.technician===session.name && b.status!=='Cancelled');
+  const today = myJobs.filter(b=>isToday(b.date));
+  const pending = myJobs.filter(b=>b.status==='Confirmed'||b.status==='Pending');
+  const done = myJobs.filter(b=>b.status==='Done');
+  return `<div class="welcome-banner">
+    <div class="wb-tag">👷 Technician View</div>
+    <div class="wb-name">Hi, ${session.name.split(' ')[0]}! 🔧</div>
+    <div class="wb-msg">You have <strong>${today.length} job(s) today</strong> and <strong>${pending.length} upcoming</strong>. Let's get to work!</div>
+  </div>
+  <div class="stats-grid">
+    <div class="stat-card stat-warning"><div class="stat-icon">📅</div><div class="stat-label">Today's Jobs</div><div class="stat-value">${today.length}</div></div>
+    <div class="stat-card stat-info"><div class="stat-icon">🔧</div><div class="stat-label">Upcoming</div><div class="stat-value">${pending.length}</div></div>
+    <div class="stat-card stat-success"><div class="stat-icon">✅</div><div class="stat-label">Completed</div><div class="stat-value">${done.length}</div></div>
+  </div>
+  ${renderMyJobs()}`;
+}
+
+/* ===========================
+   CHARTS
+=========================== */
+function renderMonthlyChart() {
+  const bks = Object.values(BOOKINGS);
+  const months = [];
+  const now = new Date();
+  for (let i=5; i>=0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    const label = d.toLocaleString('default',{month:'short'});
+    const count = bks.filter(b=>{
+      const bd = new Date(b.date||b.createdAt||'');
+      return bd.getMonth()===d.getMonth() && bd.getFullYear()===d.getFullYear();
+    }).length;
+    months.push({label,count});
+  }
+  const max = Math.max(...months.map(m=>m.count),1);
+  const colors = ['#f59e0b','#f59e0b','#f59e0b','#f59e0b','#f59e0b','#1a3566'];
+  return `<div class="chart-wrap"><div class="chart-title">Monthly Job Volume (Last 6 Months)</div>
+    <div class="bar-chart">${months.map((m,i)=>`
+      <div class="bar-item">
+        <div class="bar-val">${m.count}</div>
+        <div class="bar-fill" style="height:${(m.count/max)*100}%;background:${i===5?'#f59e0b':'#1a3566'};opacity:${i===5?1:0.6}"></div>
+        <div class="bar-label">${m.label}</div>
+      </div>`).join('')}</div></div>`;
+}
+
+function renderServiceChart() {
+  const bks = Object.values(BOOKINGS);
+  const svcCount = {};
+  bks.forEach(b=>{
+    const s = b.service||'Other';
+    const key = s.length>20?s.substring(0,18)+'…':s;
+    svcCount[key]=(svcCount[key]||0)+1;
+  });
+  const sorted = Object.entries(svcCount).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const max = Math.max(...sorted.map(s=>s[1]),1);
+  const cols = ['#f59e0b','#3b82f6','#10b981','#a78bfa','#ef4444','#06b6d4'];
+  if (!sorted.length) return '<div class="empty" style="padding:20px">No service data yet</div>';
+  return `<div class="chart-wrap"><div class="chart-title">Top Services</div>
+    <div class="bar-chart">${sorted.map(([s,c],i)=>`
+      <div class="bar-item">
+        <div class="bar-val" style="color:${cols[i]}">${c}</div>
+        <div class="bar-fill" style="height:${(c/max)*100}%;background:${cols[i]}"></div>
+        <div class="bar-label">${s}</div>
+      </div>`).join('')}</div></div>`;
+}
+
+function renderRecentBookings() {
+  const bks = Object.values(BOOKINGS).sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0)).slice(0,4);
+  if (!bks.length) return '<div class="empty" style="padding:20px"><div class="empty-ic">📋</div>No bookings yet</div>';
+  return bks.map(b=>`
+    <div class="complaint-card" onclick="openBookingDetail('${b.id}')">
+      <div class="cc-head">
+        <div><div class="cc-title">${b.name||'Client'}</div><div class="cc-meta">${b.service||'—'}</div></div>
+        <span class="status-badge s-${(b.status||'pending').toLowerCase()}">${b.status||'Pending'}</span>
+      </div>
+      <div class="cc-meta">📅 ${formatDate(b.date)} · 📞 ${b.phone||'—'}</div>
+    </div>`).join('');
+}
+
+/* ===========================
+   BOOKINGS
+=========================== */
+function renderBookings() {
+  const bks = Object.values(BOOKINGS).sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0));
+  return `<div class="panel">
+    <div class="panel-head">
+      <div class="panel-title">📋 All Bookings (${bks.length})</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-gold btn-sm" onclick="openNewBooking()">➕ New Booking</button>
+        <button class="btn btn-outline btn-sm" onclick="manualSync()">⟳ Refresh</button>
+      </div>
+    </div>
+    <div style="padding:14px">
+      <div class="toolbar">
+        <input type="text" id="bkSearch" placeholder="🔍 Search name, phone, service..." oninput="filterBookings()" style="flex:1;min-width:180px">
+        <select id="bkStatus" onchange="filterBookings()">
+          <option value="">All Status</option>
+          <option>Pending</option><option>Confirmed</option><option>Ongoing</option><option>Done</option><option>Cancelled</option>
+        </select>
+        <select id="bkSvc" onchange="filterBookings()">
+          <option value="">All Services</option>
+          ${SERVICES.map(s=>`<option>${s}</option>`).join('')}
+        </select>
+        <select id="bkMonth" onchange="filterBookings()">
+          <option value="">All Months</option>
+          ${getMonthOptions()}
+        </select>
+      </div>
+      <div class="tbl-wrap">
+        <table id="bkTable">
+          <thead><tr>
+            <th>Booking ID</th><th>Client</th><th>Service</th><th>Date</th>
+            <th>Technician</th><th>Status</th><th>Amount</th><th>Actions</th>
+          </tr></thead>
+          <tbody id="bkBody">${renderBookingRows(bks)}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderBookingRows(bks) {
+  if (!bks.length) return `<tr><td colspan="8"><div class="empty"><div class="empty-ic">📋</div>No bookings found</div></td></tr>`;
+  return bks.map(b=>`<tr>
+    <td><span style="font-family:monospace;font-size:11px;color:var(--accent)">${b.id||'—'}</span></td>
+    <td><strong>${b.name||'—'}</strong><div style="font-size:11px;color:var(--text-dim)">${b.phone||''}</div></td>
+    <td style="max-width:160px;font-size:12px">${b.service||'—'}</td>
+    <td style="font-size:12px">${formatDate(b.date)}</td>
+    <td style="font-size:12px">${b.technician||'<span style="color:var(--text-dim)">Unassigned</span>'}</td>
+    <td><span class="status-badge s-${(b.status||'pending').toLowerCase()}">${b.status||'Pending'}</span></td>
+    <td style="font-size:12px">${b.amount?'₱'+parseFloat(b.amount).toLocaleString():'—'}</td>
+    <td>
+      <button class="btn btn-primary btn-xs" onclick="openBookingDetail('${b.id}')">View</button>
+      ${session.role!=='tech'?`<button class="btn btn-gold btn-xs" onclick="openReceiptModal('${b.id}')">🧾</button>`:''}
+    </td>
+  </tr>`).join('');
+}
+
+function filterBookings() {
+  const q = document.getElementById('bkSearch')?.value.toLowerCase()||'';
+  const st = document.getElementById('bkStatus')?.value||'';
+  const svc = document.getElementById('bkSvc')?.value||'';
+  const mo = document.getElementById('bkMonth')?.value||'';
+  let bks = Object.values(BOOKINGS);
+  if (q) bks = bks.filter(b=>(b.name+b.phone+b.service+b.id).toLowerCase().includes(q));
+  if (st) bks = bks.filter(b=>b.status===st);
+  if (svc) bks = bks.filter(b=>b.service===svc);
+  if (mo) bks = bks.filter(b=>b.date&&b.date.startsWith(mo));
+  document.getElementById('bkBody').innerHTML = renderBookingRows(bks);
+}
+
+/* ===========================
+   BOOKING DETAIL
+=========================== */
+function openBookingDetail(id) {
+  const b = BOOKINGS[id];
+  if (!b) return;
+  document.getElementById('bmTitle').textContent = b.name || 'Booking Details';
+  document.getElementById('bmSub').textContent = `${b.id} · ${formatDate(b.date)}`;
+  document.getElementById('bmBody').innerHTML = `
+    <div class="form-grid">
+      <div><div class="sec-divider">Client Information</div>
+        <div class="info-row"><span class="info-label">Name</span><span class="info-val"><strong>${b.name||'—'}</strong></span></div>
+        <div class="info-row"><span class="info-label">Phone</span><span class="info-val">${b.phone||'—'}</span></div>
+        <div class="info-row"><span class="info-label">Email</span><span class="info-val">${b.email||'—'}</span></div>
+        <div class="info-row"><span class="info-label">Address</span><span class="info-val">${b.address||'—'}</span></div>
+        <div class="info-row"><span class="info-label">Landmark</span><span class="info-val">${b.landmark||'—'}</span></div>
+      </div>
+      <div><div class="sec-divider">Service Details</div>
+        <div class="info-row"><span class="info-label">Service</span><span class="info-val"><strong>${b.service||'—'}</strong></span></div>
+        <div class="info-row"><span class="info-label">Date</span><span class="info-val">${formatDate(b.date)}</span></div>
+        <div class="info-row"><span class="info-label">Time</span><span class="info-val">${b.time||'—'}</span></div>
+        <div class="info-row"><span class="info-label">Status</span><span class="info-val"><span class="status-badge s-${(b.status||'pending').toLowerCase()}">${b.status||'Pending'}</span></span></div>
+        <div class="info-row"><span class="info-label">Technician</span><span class="info-val">${b.technician||'<em style="color:var(--text-dim)">Unassigned</em>'}</span></div>
+        <div class="info-row"><span class="info-label">Amount</span><span class="info-val"><strong style="color:var(--accent)">${b.amount?'₱'+parseFloat(b.amount).toLocaleString():'—'}</strong></span></div>
+        <div class="info-row"><span class="info-label">Notes</span><span class="info-val">${b.notes||'—'}</span></div>
+      </div>
+    </div>
+    ${session.role!=='tech'?`
+    <div class="sec-divider" style="margin-top:16px">Update Booking</div>
+    <div class="form-grid">
+      <div class="field"><label>Assign Technician</label>
+        <select id="detTech"><option value="">— Select —</option>${TECHNICIANS.map(t=>`<option ${b.technician===t?'selected':''}>${t}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>Status</label>
+        <select id="detStatus">
+          ${['Pending','Confirmed','Ongoing','Done','Cancelled'].map(s=>`<option ${b.status===s?'selected':''}>${s}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Amount (₱)</label>
+        <input type="number" id="detAmount" value="${b.amount||''}" placeholder="e.g. 500">
+      </div>
+      <div class="field"><label>Notes</label>
+        <input type="text" id="detNotes" value="${b.notes||''}" placeholder="Internal notes">
+      </div>
+    </div>`:''}
+    ${b.mapLat?`<div style="margin-top:10px"><a href="https://maps.google.com/?q=${b.mapLat},${b.mapLng}" target="_blank" class="btn btn-outline btn-sm">📍 Open in Google Maps</a></div>`:''}`;
+
+  const foot = document.getElementById('bmFoot');
+  if (session.role!=='tech') {
+    foot.innerHTML = `
+      <button class="btn btn-outline btn-sm" onclick="closeModal('bookingModal')">Close</button>
+      <button class="btn btn-gold btn-sm" onclick="openReceiptModal('${id}')">🧾 Generate Receipt</button>
+      <button class="btn btn-primary btn-sm" onclick="updateBooking('${id}')">💾 Save Changes</button>`;
+  } else {
+    foot.innerHTML = `<button class="btn btn-outline btn-sm" onclick="closeModal('bookingModal')">Close</button>
+      <button class="btn btn-success btn-sm" onclick="markDone('${id}')">✅ Mark as Done</button>`;
+  }
+  openModal('bookingModal');
+}
+
+function updateBooking(id) {
+  const b = BOOKINGS[id];
+  if (!b) return;
+  const tech = document.getElementById('detTech')?.value;
+  const status = document.getElementById('detStatus')?.value;
+  const amount = document.getElementById('detAmount')?.value;
+  const notes = document.getElementById('detNotes')?.value;
+  if (tech) b.technician = tech;
+  if (status) b.status = status;
+  if (amount !== undefined) b.amount = amount;
+  if (notes !== undefined) b.notes = notes;
+  b._dirty = true;
+  saveLocalData();
+  syncBookingToSheets(b);
+  logActivity('✏️', `Updated booking ${id} — Status: ${status}, Tech: ${tech||b.technician}`, 'booking');
+  addNotif(`Booking ${id} updated to ${status}`);
+  closeModal('bookingModal');
+  switchView('bookings');
+  showToast('Booking updated! Syncing to Sheets...', 'success');
+  updateNavBadges();
+}
+
+function markDone(id) {
+  const b = BOOKINGS[id];
+  if (!b) return;
+  b.status = 'Done';
+  b.completedAt = new Date().toISOString();
+  b._dirty = true;
+  saveLocalData();
+  syncBookingToSheets(b);
+  logActivity('✅', `${session.name} marked job ${id} as Done`, 'job');
+  closeModal('bookingModal');
+  showToast('Job marked as Done! Great work! 💪', 'success');
+  switchView('my-jobs');
+}
+
+/* ===========================
+   NEW BOOKING
+=========================== */
+/* ===== SERVICE DETAIL FIELDS ===== */
+const HP_OPTS=['0.5 HP','0.75 HP','1.0 HP','1.5 HP','2.0 HP','2.5 HP','3.0 HP','5.0 HP'];
+const AC_BRANDS=['Carrier','Kolin','Midea','Panasonic','LG','Samsung','Sharp','Fujidaire','Condura','Gree','Other'];
+const WM_BRANDS=['Samsung','LG','Whirlpool','Panasonic','Sharp','Condura','Haier','Midea','Other'];
+const WM_CAP=['5 kg','6 kg','7 kg','8 kg','9 kg','10 kg','11 kg','12 kg','13 kg+'];
+const FLOOR_OPTS=['Ground Floor','2nd Floor','3rd Floor','4th Floor+','Rooftop'];
+
+function getServiceFields(svc) {
+  if (!svc) return '';
+  const hp = `<select id="nb_hp"><option value="">— HP —</option>${HP_OPTS.map(h=>`<option>${h}</option>`).join('')}</select>`;
+  const bac = `<select id="nb_brand"><option value="">— Brand —</option>${AC_BRANDS.map(b=>`<option>${b}</option>`).join('')}</select>`;
+  const fl = `<select id="nb_floor"><option value="">— Floor —</option>${FLOOR_OPTS.map(f=>`<option>${f}</option>`).join('')}</select>`;
+  const un = `<select id="nb_units"><option value="1">1 unit</option><option value="2">2 units</option><option value="3">3 units</option><option value="4">4 units</option><option value="5+">5+ units</option></select>`;
+
+  if (svc.includes('Aircon Cleaning')) {
+    const isW = svc.includes('Window'), isS = svc.includes('Split');
+    return `<div class="sec-divider" style="margin-top:6px">Unit Details</div><div class="form-grid">
+      ${(!isW&&!isS)?`<div class="field"><label>Unit Type *</label><select id="nb_actype"><option value="">—</option><option>Window Type</option><option>Split Type</option></select></div>`:`<div class="field"><label>Unit Type</label><input value="${isW?'Window Type':'Split Type'}" readonly style="background:var(--bg-elev2)"></div>`}
+      <div class="field"><label>HP *</label>${hp}</div>
+      <div class="field"><label>Brand</label>${bac}</div>
+      <div class="field"><label>No. of Units</label>${un}</div>
+      <div class="field"><label>Floor</label>${fl}</div>
+    </div>`;
+  }
+  if (svc.includes('AWM') || svc.includes('Washing')) {
+    return `<div class="sec-divider" style="margin-top:6px">Washing Machine Details</div><div class="form-grid">
+      <div class="field"><label>Type *</label><select id="nb_wmtype"><option value="">—</option><option>Front Load</option><option>Top Load</option></select></div>
+      <div class="field"><label>Capacity</label><select id="nb_wmcap"><option value="">—</option>${WM_CAP.map(c=>`<option>${c}</option>`).join('')}</select></div>
+      <div class="field"><label>Brand</label><select id="nb_brand"><option value="">—</option>${WM_BRANDS.map(b=>`<option>${b}</option>`).join('')}</select></div>
+    </div>`;
+  }
+  if (svc.includes('Installation')) {
+    return `<div class="sec-divider" style="margin-top:6px">Installation Details</div><div class="form-grid">
+      <div class="field"><label>HP *</label>${hp}</div>
+      <div class="field"><label>Brand</label>${bac}</div>
+      <div class="field"><label>No. of Units</label>${un}</div>
+      <div class="field"><label>Floor</label>${fl}</div>
+    </div>`;
+  }
+  if (svc.includes('Relocation')) {
+    return `<div class="sec-divider" style="margin-top:6px">Relocation Details</div><div class="form-grid">
+      <div class="field"><label>HP *</label>${hp}</div>
+      <div class="field"><label>Brand</label>${bac}</div>
+      <div class="field"><label>From Floor</label><select id="nb_floor_from"><option value="">—</option>${FLOOR_OPTS.map(f=>`<option>${f}</option>`).join('')}</select></div>
+      <div class="field"><label>To Floor</label><select id="nb_floor_to"><option value="">—</option>${FLOOR_OPTS.map(f=>`<option>${f}</option>`).join('')}</select></div>
+    </div>`;
+  }
+  if (svc.includes('Dismantle')) {
+    return `<div class="sec-divider" style="margin-top:6px">Unit Details</div><div class="form-grid">
+      <div class="field"><label>HP</label>${hp}</div>
+      <div class="field"><label>Brand</label>${bac}</div>
+      <div class="field"><label>No. of Units</label>${un}</div>
+      <div class="field"><label>Floor</label>${fl}</div>
+    </div>`;
+  }
+  if (svc.includes('Freon')) {
+    return `<div class="sec-divider" style="margin-top:6px">Unit Details</div><div class="form-grid">
+      <div class="field"><label>HP *</label>${hp}</div>
+      <div class="field"><label>Brand</label>${bac}</div>
+      <div class="field"><label>No. of Units</label>${un}</div>
+    </div>
+    <div style="background:var(--info-soft);border:1px solid var(--info);border-radius:8px;padding:9px 12px;font-size:12px;margin-top:6px;color:var(--info)">🔧 Refrigerant type (R22/R32/R410A) will be assessed by the technician on-site.</div>`;
+  }
+  if (svc.includes('Bracket')) {
+    return `<div class="sec-divider" style="margin-top:6px">Bracket Details</div><div class="form-grid">
+      <div class="field"><label>HP</label>${hp}</div>
+      <div class="field"><label>No. of Units</label>${un}</div>
+      <div class="field"><label>Floor</label>${fl}</div>
+    </div>`;
+  }
+  if (svc.includes('Breaker')) {
+    return `<div class="sec-divider" style="margin-top:6px">Breaker Details</div><div class="form-grid">
+      <div class="field"><label>Ampere Rating</label><select id="nb_amp"><option value="">—</option><option>15A</option><option>20A</option><option>30A</option><option>40A</option><option>60A</option><option>100A</option></select></div>
+      <div class="field"><label>No. of Breakers</label><select id="nb_units"><option>1</option><option>2</option><option>3</option><option>4</option><option>5+</option></select></div>
+    </div>`;
+  }
+  if (svc.includes('Electrical') || svc.includes('Plumbing')) {
+    return `<div class="sec-divider" style="margin-top:6px">Problem Description</div>
+      <div class="field"><label>Describe the issue *</label><textarea id="nb_issue" placeholder="e.g. No power sa isang room, leaking pipe, etc." style="min-height:70px"></textarea></div>`;
+  }
+  if (svc === 'Other') {
+    return `<div class="sec-divider" style="margin-top:6px">Service Needed</div>
+      <div class="field"><label>Describe the service needed *</label><textarea id="nb_issue" placeholder="Please describe what service you need..." style="min-height:70px"></textarea></div>`;
+  }
+  return '';
+}
+
+function getServiceDetails() {
+  const pick = id => document.getElementById(id)?.value||'';
+  const f = {
+    hp:pick('nb_hp'), brand:pick('nb_brand'), units:pick('nb_units'),
+    floor:pick('nb_floor'), actype:pick('nb_actype'), wmtype:pick('nb_wmtype'),
+    wmcap:pick('nb_wmcap'), amp:pick('nb_amp'),
+    floor_from:pick('nb_floor_from'), floor_to:pick('nb_floor_to'),
+    issue:pick('nb_issue')
+  };
+  const parts=[];
+  if(f.actype)parts.push(f.actype);
+  if(f.wmtype)parts.push(f.wmtype);
+  if(f.hp)parts.push(f.hp);
+  if(f.brand)parts.push(f.brand);
+  if(f.wmcap)parts.push(f.wmcap);
+  if(f.units)parts.push(f.units+' unit(s)');
+  if(f.floor)parts.push(f.floor);
+  if(f.floor_from&&f.floor_to)parts.push(f.floor_from+' → '+f.floor_to);
+  if(f.amp)parts.push(f.amp);
+  if(f.issue)parts.push(f.issue);
+  return {fields:f, summary:parts.join(' · ')};
+}
+
+function updateServiceFields() {
+  const svc = document.getElementById('nb_service')?.value||'';
+  const c = document.getElementById('nb_svcFields');
+  if (c) c.innerHTML = getServiceFields(svc);
+}
+
+function openNewBooking(name='',phone='',address='') {
+  document.getElementById('emTitle').textContent = 'New Booking';
+  document.getElementById('emSub').textContent = 'Walk-in, call-in, or booked by admin';
+  document.getElementById('emBody').innerHTML = `
+    <div class="form-grid">
+      <div class="field form-full"><label>Client Name *</label><input id="nb_name" value="${name}" placeholder="e.g. Juan Dela Cruz"></div>
+      <div class="field"><label>Phone *</label><input id="nb_phone" value="${phone}" placeholder="09171234567" type="tel"></div>
+      <div class="field"><label>Email</label><input id="nb_email" placeholder="email@example.com" type="email"></div>
+      <div class="field form-full"><label>Address *</label><input id="nb_address" value="${address}" placeholder="House/Street/Barangay/City"></div>
+      <div class="field"><label>Landmark</label><input id="nb_landmark" placeholder="e.g. Near Jollibee"></div>
+      <div class="field form-full"><label>Service *</label>
+        <select id="nb_service" onchange="updateServiceFields()">
+          <option value="">— Select Service —</option>
+          ${SERVICES.map(s=>`<option>${s}</option>`).join('')}
+          <option>Other</option>
+        </select>
+      </div>
+    </div>
+    <div id="nb_svcFields"></div>
+    <div class="form-grid" style="margin-top:10px">
+      <div class="field"><label>Preferred Date *</label><input type="date" id="nb_date" min="${new Date().toISOString().split('T')[0]}"></div>
+      <div class="field"><label>Preferred Time</label>
+        <select id="nb_time"><option>Morning (8AM–12PM)</option><option>Afternoon (1PM–5PM)</option><option>Flexible</option></select>
+      </div>
+      <div class="field"><label>Assign Technician</label>
+        <select id="nb_tech"><option value="">— To be assigned —</option>${TECHNICIANS.map(t=>`<option>${t}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>Amount (₱)</label><input type="number" id="nb_amount" placeholder="0.00"></div>
+      <div class="field"><label>AC Usage Frequency</label>
+        <select id="nb_usage"><option value="">— For follow-up tracking —</option>${USAGE_OPTS.map(u=>`<option>${u.label}</option>`).join('')}</select>
+      </div>
+      <div class="field form-full"><label>Additional Notes</label><textarea id="nb_notes" placeholder="Other instructions, special requests..."></textarea></div>
+    </div>`;
+  document.getElementById('emFoot').innerHTML = `
+    <button class="btn btn-outline btn-sm" onclick="closeModal('editModal')">Cancel</button>
+    <button class="btn btn-gold btn-sm" onclick="saveBooking()">💾 Save Booking</button>`;
+  openModal('editModal');
+}
+
+function saveBooking() {
+  const name = document.getElementById('nb_name')?.value?.trim();
+  const phone = document.getElementById('nb_phone')?.value?.trim();
+  const address = document.getElementById('nb_address')?.value?.trim();
+  const service = document.getElementById('nb_service')?.value;
+  const date = document.getElementById('nb_date')?.value;
+  if (!name||!phone||!address||!service||!date) { showToast('Fill in all required fields (*)','error'); return; }
+  const usage = document.getElementById('nb_usage')?.value||'';
+  const {fields, summary} = getServiceDetails();
+  const id = 'BK-'+Date.now();
+  BOOKINGS[id] = {
+    id, name, phone,
+    email: document.getElementById('nb_email')?.value||'',
+    address, landmark: document.getElementById('nb_landmark')?.value||'',
+    service, serviceDetails: fields, serviceDetailsSummary: summary,
+    date, time: document.getElementById('nb_time')?.value||'',
+    technician: document.getElementById('nb_tech')?.value||'',
+    amount: document.getElementById('nb_amount')?.value||'',
+    notes: document.getElementById('nb_notes')?.value||'',
+    usage, nextCleaningDate: calcNextCleaning(date, usage),
+    status:'Pending', createdAt: new Date().toISOString(), source:'manual'
+  };
+  saveLocalData();
+  logActivity('➕', `New booking: ${name} — ${service}${summary?' ('+summary+')':''}`, 'booking');
+  addNotif(`New booking from ${name}: ${service}`);
+  syncBookingToSheets(BOOKINGS[id]);
+  closeModal('editModal');
+  switchView('bookings');
+  showToast(`Booking created! ID: ${id}`, 'success');
+  updateNavBadges();
+}
+
+/* ===========================
+   JOB MANAGEMENT
+=========================== */
+function renderJobs() {
+  const bks = Object.values(BOOKINGS).filter(b=>b.status!=='Cancelled');
+  const today = bks.filter(b=>isToday(b.date));
+  const upcoming = bks.filter(b=>isFuture(b.date)&&b.status!=='Done');
+  const unassigned = bks.filter(b=>!b.technician&&b.status==='Pending');
+  return `<div class="stats-grid">
+    <div class="stat-card stat-warning"><div class="stat-icon">🔴</div><div class="stat-label">Unassigned</div><div class="stat-value">${unassigned.length}</div></div>
+    <div class="stat-card stat-gold"><div class="stat-icon">📅</div><div class="stat-label">Today's Jobs</div><div class="stat-value">${today.length}</div></div>
+    <div class="stat-card stat-info"><div class="stat-icon">🔜</div><div class="stat-label">Upcoming</div><div class="stat-value">${upcoming.length}</div></div>
+  </div>
+  ${unassigned.length?`<div class="panel" style="border-color:var(--warning)">
+    <div class="panel-head" style="background:var(--warning-soft)"><div class="panel-title" style="color:var(--warning)">⚠️ Unassigned Bookings</div></div>
+    <div class="panel-body booking-grid">${unassigned.map(b=>renderBookingCard(b)).join('')}</div>
+  </div>`:''}
+  <div class="panel">
+    <div class="panel-head"><div class="panel-title">📋 All Active Jobs</div></div>
+    <div class="panel-body booking-grid">${bks.filter(b=>b.status!=='Done').map(b=>renderBookingCard(b)).join('')||'<div class="empty"><div class="empty-ic">✅</div>All jobs completed!</div>'}</div>
+  </div>`;
+}
+
+function renderBookingCard(b) {
+  return `<div class="booking-card" onclick="openBookingDetail('${b.id}')">
+    <div class="bc-head">
+      <div class="bc-avatar">${(b.name||'?')[0].toUpperCase()}</div>
+      <div><div class="bc-name">${b.name||'—'}</div><div class="bc-id">${b.id}</div></div>
+      <span class="status-badge s-${(b.status||'pending').toLowerCase()}" style="margin-left:auto">${b.status}</span>
+    </div>
+    <div class="bc-service">🔧 ${b.service||'—'}</div>
+    <div class="bc-meta">
+      <span class="bc-tag" style="background:var(--bg-elev2)">📅 ${formatDate(b.date)}</span>
+      <span class="bc-tag" style="background:var(--bg-elev2)">👷 ${b.technician||'Unassigned'}</span>
+      ${b.amount?`<span class="bc-tag" style="background:var(--accent-soft);color:var(--accent)">₱${parseFloat(b.amount).toLocaleString()}</span>`:''}
+    </div>
+  </div>`;
+}
+
+/* ===========================
+   MY JOBS (TECH)
+=========================== */
+function renderMyJobs() {
+  const myJobs = Object.values(BOOKINGS).filter(b=>b.technician===session.name).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const active = myJobs.filter(b=>b.status!=='Done'&&b.status!=='Cancelled');
+  const done = myJobs.filter(b=>b.status==='Done');
+  if (!myJobs.length) return `<div class="empty"><div class="empty-ic">🔧</div><p>No jobs assigned to you yet.</p></div>`;
+  return `<div class="panel">
+    <div class="panel-head"><div class="panel-title">🔧 My Active Jobs (${active.length})</div></div>
+    <div class="panel-body booking-grid">${active.map(b=>`
+      <div class="booking-card" onclick="openBookingDetail('${b.id}')">
+        <div class="bc-head">
+          <div class="bc-avatar">${(b.name||'?')[0].toUpperCase()}</div>
+          <div><div class="bc-name">${b.name||'—'}</div><div class="bc-id">${b.id}</div></div>
+          <span class="status-badge s-${(b.status||'pending').toLowerCase()}" style="margin-left:auto">${b.status}</span>
+        </div>
+        <div class="bc-service">🔧 ${b.service||'—'}</div>
+        <div style="font-size:12px;color:var(--text-dim);margin:6px 0">📍 ${b.address||'—'}</div>
+        <div class="bc-meta">
+          <span class="bc-tag" style="background:var(--bg-elev2)">📅 ${formatDate(b.date)}</span>
+          <span class="bc-tag" style="background:var(--bg-elev2)">🕐 ${b.time||'—'}</span>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:6px">
+          ${b.mapLat?`<a href="https://maps.google.com/?q=${b.mapLat},${b.mapLng}" target="_blank" class="btn btn-outline btn-xs">📍 Maps</a>`:`<a href="https://maps.google.com/?q=${encodeURIComponent(b.address||'')}" target="_blank" class="btn btn-outline btn-xs">📍 Maps</a>`}
+          <button class="btn btn-success btn-xs" onclick="event.stopPropagation();markDone('${b.id}')">✅ Done</button>
+        </div>
+      </div>`).join('')||'<div class="empty">No active jobs</div>'}</div>
+  </div>
+  ${done.length?`<div class="panel">
+    <div class="panel-head"><div class="panel-title">✅ Completed Jobs (${done.length})</div></div>
+    <div class="panel-body"><div class="tbl-wrap"><table><thead><tr><th>ID</th><th>Client</th><th>Service</th><th>Date</th><th>Amount</th></tr></thead>
+    <tbody>${done.map(b=>`<tr><td style="font-family:monospace;font-size:11px;color:var(--accent)">${b.id}</td><td>${b.name}</td><td style="font-size:12px">${b.service}</td><td>${formatDate(b.date)}</td><td>${b.amount?'₱'+parseFloat(b.amount).toLocaleString():'—'}</td></tr>`).join('')}</tbody></table></div></div>
+  </div>`:''}`;
+}
+
+/* ===========================
+   CLIENTS
+=========================== */
+function renderClients() {
+  const clients = mergeClients();
+  const now = new Date();
+  return `<div class="panel">
+    <div class="panel-head">
+      <div class="panel-title">👥 Client Records (${clients.length})</div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap">
+        <button class="btn btn-gold btn-sm" onclick="openNewClient()">➕ Add Client</button>
+      </div>
+    </div>
+    <div style="padding:13px">
+      <div class="toolbar">
+        <input id="clSearch" placeholder="🔍 Search name, phone, address..." oninput="filterClientsView(this.value)" style="flex:1;min-width:160px">
+        <select id="clFilter" onchange="filterClientsView(document.getElementById('clSearch').value)">
+          <option value="">All Clients</option>
+          <option value="overdue">🔴 Overdue for Cleaning</option>
+          <option value="due">⚠️ Due Soon (≤14 days)</option>
+          <option value="ok">✅ On Track</option>
+        </select>
+      </div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Client</th><th>Phone</th><th>Address</th><th>Last Service</th><th>Usage Freq.</th><th>Next Cleaning</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="clTBody">${renderClientRows(clients)}</tbody>
+      </table></div>
+    </div>
+  </div>`;
+}
+
+function renderClientRows(clients) {
+  const now = new Date();
+  if (!clients.length) return `<tr><td colspan="8"><div class="empty"><div class="empty-ic">👥</div>No clients yet. Add old clients or sync bookings.</div></td></tr>`;
+  return clients.map(c => {
+    const next = c.nextCleaningDate ? new Date(c.nextCleaningDate) : null;
+    const diff = next ? (next - now)/(1000*60*60*24) : 999;
+    const sCls = !next ? 's-confirmed' : diff < 0 ? 's-cancelled' : diff <= 14 ? 's-pending' : 's-done';
+    const sLbl = !next ? 'No date' : diff < 0 ? 'Overdue' : diff <= 14 ? `Due ${formatDate(c.nextCleaningDate)}` : 'On track';
+    return `<tr>
+      <td><strong>${c.name}</strong>${c.email?`<div style="font-size:10.5px;color:var(--text-dim)">${c.email}</div>`:''}</td>
+      <td>${c.phone||'—'}</td>
+      <td style="font-size:12px;max-width:130px">${c.address||'—'}</td>
+      <td style="font-size:12px">${formatDate(c.lastServiceDate)}<div style="font-size:10.5px;color:var(--text-dim)">${c.lastService||'—'}</div></td>
+      <td style="font-size:11.5px">${c.usage||'<span style="color:var(--text-dim)">Not set</span>'}</td>
+      <td style="font-size:12px">${next?formatDate(c.nextCleaningDate):'—'}</td>
+      <td><span class="status-badge ${sCls}">${sLbl}</span></td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-primary btn-xs" onclick="openClientModal('${c.phone||c.name}')">View</button>
+        <button class="btn btn-gold btn-xs" onclick="openNewBooking('${c.name}','${c.phone||''}','${c.address||''}')">📋 Book</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filterClientsView(q) {
+  const filter = document.getElementById('clFilter')?.value||'';
+  let clients = mergeClients();
+  if (q) clients = clients.filter(c=>(c.name+c.phone+c.address).toLowerCase().includes(q.toLowerCase()));
+  const now = new Date();
+  if (filter==='overdue') clients = clients.filter(c=>c.nextCleaningDate&&new Date(c.nextCleaningDate)<now);
+  else if (filter==='due') clients = clients.filter(c=>{if(!c.nextCleaningDate)return false;const d=new Date(c.nextCleaningDate);const diff=(d-now)/(1000*60*60*24);return diff>=0&&diff<=14;});
+  else if (filter==='ok') clients = clients.filter(c=>{if(!c.nextCleaningDate)return true;return(new Date(c.nextCleaningDate)-now)/(1000*60*60*24)>14;});
+  const tb=document.getElementById('clTBody');
+  if(tb)tb.innerHTML=renderClientRows(clients);
+}
+
+/* ===========================
+   SCHEDULE
+=========================== */
+function renderSchedule() {
+  const today = new Date().toISOString().split('T')[0];
+  const bks = Object.values(BOOKINGS).filter(b=>b.date>=today&&b.status!=='Cancelled').sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const byDate = {};
+  bks.forEach(b=>{ if(!byDate[b.date]) byDate[b.date]=[]; byDate[b.date].push(b); });
+  return `<div class="panel">
+    <div class="panel-head"><div class="panel-title">📅 Upcoming Schedule</div></div>
+    <div class="panel-body">
+      ${Object.keys(byDate).sort().slice(0,14).map(d=>`
+        <div style="margin-bottom:18px">
+          <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">
+            ${new Date(d+'T00:00:00').toLocaleDateString('en-PH',{weekday:'long',month:'long',day:'numeric'})}
+            ${isToday(d)?'<span style="background:var(--accent);color:#0d1f3c;padding:2px 8px;border-radius:6px;font-size:10px;margin-left:6px">TODAY</span>':''}
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            ${byDate[d].map(b=>`
+              <div class="complaint-card" style="margin:0" onclick="openBookingDetail('${b.id}')">
+                <div class="cc-head">
+                  <div><div class="cc-title">${b.name} · ${b.service}</div><div class="cc-meta">👷 ${b.technician||'Unassigned'} · 🕐 ${b.time||'TBD'} · 📍 ${b.address||'—'}</div></div>
+                  <span class="status-badge s-${(b.status||'pending').toLowerCase()}">${b.status}</span>
+                </div>
+              </div>`).join('')}
+          </div>
+        </div>`).join('')||'<div class="empty"><div class="empty-ic">📅</div>No upcoming schedule</div>'}
+    </div>
+  </div>`;
+}
+
+/* ===========================
+   COMPLAINTS & WARRANTY
+=========================== */
+function renderComplaints() {
+  const open = COMPLAINTS.filter(c=>c.status==='Open');
+  const resolved = COMPLAINTS.filter(c=>c.status==='Resolved');
+  return `<div class="stats-grid">
+    <div class="stat-card stat-danger"><div class="stat-icon">🔴</div><div class="stat-label">Open Cases</div><div class="stat-value">${open.length}</div></div>
+    <div class="stat-card stat-success"><div class="stat-icon">✅</div><div class="stat-label">Resolved</div><div class="stat-value">${resolved.length}</div></div>
+    <div class="stat-card stat-info"><div class="stat-icon">🛡️</div><div class="stat-label">Total</div><div class="stat-value">${COMPLAINTS.length}</div></div>
+  </div>
+  <div class="panel">
+    <div class="panel-head">
+      <div class="panel-title">🛡️ Complaints & Warranty Cases</div>
+      <button class="btn btn-gold btn-sm" onclick="openNewComplaint()">➕ File Case</button>
+    </div>
+    <div class="panel-body">
+      ${COMPLAINTS.length?COMPLAINTS.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).map(c=>`
+        <div class="complaint-card ${c.type==='Warranty'?'warranty':c.priority==='Urgent'?'urgent':''}" onclick="openComplaintDetail('${c.id}')">
+          <div class="cc-head">
+            <div>
+              <div class="cc-title">${c.title}</div>
+              <div class="cc-meta">${c.bookingId||'No booking'} · ${c.clientName} · ${formatDate(c.createdAt)}</div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <span class="status-badge s-${c.status==='Open'?'pending':'done'}">${c.status}</span>
+              <span class="status-badge" style="background:${c.type==='Warranty'?'var(--success-soft)':'var(--info-soft)'};color:${c.type==='Warranty'?'var(--success)':'var(--info)'}">${c.type}</span>
+            </div>
+          </div>
+          <div class="cc-meta" style="margin-top:4px">📝 ${c.description?.substring(0,80)||'—'}${c.description?.length>80?'…':''}</div>
+        </div>`).join(''):`<div class="empty"><div class="empty-ic">🛡️</div>No complaints or warranty cases yet.</div>`}
+    </div>
+  </div>`;
+}
+
+function openNewComplaint() {
+  document.getElementById('cmTitle').textContent = 'File Complaint / Warranty';
+  document.getElementById('cmSub').textContent = 'Track client concerns and warranty claims';
+  document.getElementById('cmBody').innerHTML = `
+    <div class="field"><label>Type *</label>
+      <select id="cmp_type"><option>Complaint</option><option>Warranty</option></select>
+    </div>
+    <div class="field"><label>Related Booking ID</label>
+      <input id="cmp_booking" placeholder="e.g. BK-1234567890" list="bookingList">
+      <datalist id="bookingList">${Object.keys(BOOKINGS).map(id=>`<option value="${id}">`).join('')}</datalist>
+    </div>
+    <div class="field"><label>Client Name *</label><input id="cmp_client" placeholder="Client name"></div>
+    <div class="field"><label>Title *</label><input id="cmp_title" placeholder="Brief description of issue"></div>
+    <div class="field"><label>Priority</label>
+      <select id="cmp_priority"><option>Normal</option><option>Urgent</option></select>
+    </div>
+    <div class="field"><label>Description *</label>
+      <textarea id="cmp_desc" placeholder="Detailed description of the complaint or warranty claim..."></textarea>
+    </div>`;
+  document.getElementById('cmFoot').innerHTML = `
+    <button class="btn btn-outline btn-sm" onclick="closeModal('complaintModal')">Cancel</button>
+    <button class="btn btn-gold btn-sm" onclick="saveComplaint()">💾 File Case</button>`;
+  openModal('complaintModal');
+}
+
+function saveComplaint() {
+  const title = document.getElementById('cmp_title')?.value?.trim();
+  const client = document.getElementById('cmp_client')?.value?.trim();
+  const desc = document.getElementById('cmp_desc')?.value?.trim();
+  if (!title||!client||!desc) { showToast('Please fill in all required fields', 'error'); return; }
+  const id = 'CMP-'+Date.now();
+  COMPLAINTS.push({
+    id, title, clientName:client,
+    type: document.getElementById('cmp_type')?.value,
+    priority: document.getElementById('cmp_priority')?.value,
+    bookingId: document.getElementById('cmp_booking')?.value||'',
+    description:desc, status:'Open', createdAt:new Date().toISOString(),
+    createdBy:session.name
+  });
+  saveLocalData();
+  logActivity('🛡️', `New ${document.getElementById('cmp_type')?.value} filed: ${title}`, 'complaint');
+  closeModal('complaintModal');
+  switchView('complaints');
+  showToast('Case filed successfully!', 'success');
+}
+
+function openComplaintDetail(id) {
+  const c = COMPLAINTS.find(x=>x.id===id);
+  if (!c) return;
+  document.getElementById('cmTitle').textContent = c.title;
+  document.getElementById('cmSub').textContent = `${c.id} · ${c.type} · ${c.priority}`;
+  document.getElementById('cmBody').innerHTML = `
+    <div class="info-row"><span class="info-label">Type</span><span class="info-val"><span class="status-badge" style="background:${c.type==='Warranty'?'var(--success-soft)':'var(--info-soft)'};color:${c.type==='Warranty'?'var(--success)':'var(--info)'}">${c.type}</span></span></div>
+    <div class="info-row"><span class="info-label">Status</span><span class="info-val"><span class="status-badge s-${c.status==='Open'?'pending':'done'}">${c.status}</span></span></div>
+    <div class="info-row"><span class="info-label">Priority</span><span class="info-val">${c.priority==='Urgent'?'🔴':'🟡'} ${c.priority}</span></div>
+    <div class="info-row"><span class="info-label">Client</span><span class="info-val">${c.clientName}</span></div>
+    <div class="info-row"><span class="info-label">Booking ID</span><span class="info-val">${c.bookingId||'—'}</span></div>
+    <div class="info-row"><span class="info-label">Filed</span><span class="info-val">${formatDate(c.createdAt)} by ${c.createdBy}</span></div>
+    <div style="margin-top:12px"><div class="sec-divider">Description</div><p style="font-size:13px;line-height:1.6">${c.description}</p></div>
+    ${c.resolution?`<div style="margin-top:12px"><div class="sec-divider">Resolution</div><p style="font-size:13px;line-height:1.6;color:var(--success)">${c.resolution}</p></div>`:''}
+    ${c.status==='Open'&&session.role!=='tech'?`
+    <div style="margin-top:16px"><div class="sec-divider">Resolve Case</div>
+    <div class="field"><label>Resolution Notes</label><textarea id="cmp_res" placeholder="How was this resolved?"></textarea></div></div>`:''}`;
+  document.getElementById('cmFoot').innerHTML = `
+    <button class="btn btn-outline btn-sm" onclick="closeModal('complaintModal')">Close</button>
+    ${c.status==='Open'&&session.role!=='tech'?`<button class="btn btn-success btn-sm" onclick="resolveComplaint('${c.id}')">✅ Mark Resolved</button>`:''}`;
+  openModal('complaintModal');
+}
+
+function resolveComplaint(id) {
+  const c = COMPLAINTS.find(x=>x.id===id);
+  if (!c) return;
+  const res = document.getElementById('cmp_res')?.value?.trim();
+  c.status = 'Resolved';
+  c.resolution = res||'Marked as resolved by '+session.name;
+  c.resolvedAt = new Date().toISOString();
+  c.resolvedBy = session.name;
+  saveLocalData();
+  logActivity('✅', `Resolved complaint: ${c.title}`, 'complaint');
+  closeModal('complaintModal');
+  switchView('complaints');
+  showToast('Case resolved!', 'success');
+}
+
+/* ===========================
+   RECEIPTS / JOB ORDER
+=========================== */
+function renderReceipts() {
+  const done = Object.values(BOOKINGS).filter(b=>b.status==='Done'||b.amount).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  return `<div class="panel">
+    <div class="panel-head"><div class="panel-title">🧾 Service Receipts & Job Orders</div></div>
+    <div class="panel-body">
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Booking ID</th><th>Client</th><th>Service</th><th>Date</th><th>Technician</th><th>Amount</th><th>Actions</th></tr></thead>
+        <tbody>${done.length?done.map(b=>`<tr>
+          <td style="font-family:monospace;font-size:11px;color:var(--accent)">${b.id}</td>
+          <td><strong>${b.name}</strong></td>
+          <td style="font-size:12px">${b.service||'—'}</td>
+          <td>${formatDate(b.date)}</td>
+          <td>${b.technician||'—'}</td>
+          <td><strong style="color:var(--accent)">${b.amount?'₱'+parseFloat(b.amount).toLocaleString():'—'}</strong></td>
+          <td>
+            <button class="btn btn-gold btn-xs" onclick="openReceiptModal('${b.id}')">🧾 Receipt</button>
+            <button class="btn btn-primary btn-xs" onclick="openReceiptModal('${b.id}','jo')">📋 Job Order</button>
+          </td>
+        </tr>`).join(''):`<tr><td colspan="7"><div class="empty"><div class="empty-ic">🧾</div>No completed jobs yet</div></td></tr>`}</tbody>
+      </table></div>
+    </div>
+  </div>`;
+}
+
+function openReceiptModal(id, type='receipt') {
+  const b = BOOKINGS[id];
+  if (!b) return;
+  currentReceiptBooking = b;
+  const isJO = type==='jo';
+  document.getElementById('rmSub').textContent = `${isJO?'Job Order':'Service Receipt'} · ${b.id}`;
+  const now = new Date();
+  const receiptNo = 'OR-'+Date.now().toString().slice(-8);
+  document.getElementById('rmBody').innerHTML = `
+    <div class="receipt-preview" id="receiptContent">
+      <div class="receipt-header">
+        <div class="receipt-logo-text">DJ-<span>CE</span></div>
+        <div class="receipt-sub">Aircon & Electrical Services · Calumpit, Bulacan</div>
+        <div class="receipt-sub">📞 09762592458 · djceservicesforyou@gmail.com</div>
+        <div class="receipt-id">${isJO?'JOB ORDER':'OFFICIAL RECEIPT'} NO: ${receiptNo}</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;font-size:12px">
+        <div>
+          <strong>BILL TO:</strong><br>
+          ${b.name||'—'}<br>
+          ${b.address||'—'}<br>
+          ${b.phone||''} ${b.email?'· '+b.email:''}
+        </div>
+        <div style="text-align:right">
+          <strong>DATE:</strong> ${now.toLocaleDateString('en-PH',{year:'numeric',month:'long',day:'numeric'})}<br>
+          <strong>SERVICE DATE:</strong> ${new Date(b.date+'T00:00:00').toLocaleDateString('en-PH',{year:'numeric',month:'long',day:'numeric'})}<br>
+          <strong>TECHNICIAN:</strong> ${b.technician||'—'}<br>
+          <strong>STATUS:</strong> ${b.status||'—'}
+        </div>
+      </div>
+
+      <table class="receipt-table">
+        <thead><tr><th>#</th><th>Description</th><th>Notes</th><th>Amount</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>${b.service||'Service'}${b.serviceDetailsSummary?'<br><small style="color:#666">'+b.serviceDetailsSummary+'</small>':''}</td><td>${b.notes||'—'}</td><td style="text-align:right">${b.amount?'₱'+parseFloat(b.amount).toLocaleString():'₱ —'}</td></tr>
+        </tbody>
+      </table>
+
+      <div class="receipt-total">TOTAL: ${b.amount?'₱'+parseFloat(b.amount).toLocaleString():'₱ ___________'}</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;font-size:11px">
+        <div>
+          <strong>MODE OF PAYMENT:</strong> ${b.payment||'Cash / GCash'}<br><br>
+          <div style="border-top:1px solid #000;padding-top:4px;margin-top:20px">Client Signature / Received by</div>
+        </div>
+        <div style="text-align:right">
+          <strong>Prepared by:</strong><br><br>
+          <div style="border-top:1px solid #000;padding-top:4px;margin-top:20px">${b.technician||'Technician'} · DJ-CE</div>
+        </div>
+      </div>
+
+      <div class="receipt-footer">
+        Thank you for trusting DJ-CE Aircon & Electrical Services! 🙏<br>
+        Warranty: Free back job within warranty period for the same issue.<br>
+        Reliable · Safe · Long-Lasting
+      </div>
+    </div>`;
+  openModal('receiptModal');
+}
+
+function printReceipt() {
+  const content = document.getElementById('receiptContent')?.innerHTML;
+  const w = window.open('','_blank');
+  w.document.write(`<html><head><title>Receipt</title>
+    <style>body{font-family:Arial,sans-serif;padding:24px;font-size:12px;color:#000}
+    table{width:100%;border-collapse:collapse}th,td{padding:6px 10px;border:1px solid #ddd;text-align:left}
+    th{background:#0d1f3c;color:#fff}</style></head>
+    <body onload="window.print()">${content}</body></html>`);
+}
+
+function downloadReceiptPDF() {
+  const b = currentReceiptBooking;
+  if (!b||!window.jspdf) { showToast('PDF library loading...', 'info'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const now = new Date();
+
+  doc.setFillColor(13,31,60); doc.rect(0,0,210,30,'F');
+  doc.setTextColor(245,158,11); doc.setFontSize(18); doc.setFont(undefined,'bold');
+  doc.text('DJ-CE SERVICE RECEIPT',105,14,{align:'center'});
+  doc.setTextColor(255,255,255); doc.setFontSize(8); doc.setFont(undefined,'normal');
+  doc.text('Aircon & Electrical Services · Calumpit, Bulacan · 09762592458',105,22,{align:'center'});
+
+  doc.setTextColor(0,0,0); doc.setFontSize(10);
+  doc.text(`Booking ID: ${b.id}`,14,40);
+  doc.text(`Date: ${now.toLocaleDateString()}`,150,40);
+  doc.text(`Client: ${b.name||'—'}`,14,48);
+  doc.text(`Address: ${b.address||'—'}`,14,55);
+  doc.text(`Phone: ${b.phone||'—'}`,14,62);
+  doc.text(`Technician: ${b.technician||'—'}`,14,69);
+
+  doc.autoTable({
+    startY:78, head:[['Service','Details','Amount']],
+    body:[[b.service||'—', b.notes||'—', b.amount?'₱'+parseFloat(b.amount).toLocaleString():'₱ ___']],
+    headStyles:{fillColor:[13,31,60],textColor:255},
+    alternateRowStyles:{fillColor:[248,246,241]}
+  });
+
+  const finalY = doc.lastAutoTable.finalY+10;
+  doc.setFont(undefined,'bold');
+  doc.text(`TOTAL: ${b.amount?'₱'+parseFloat(b.amount).toLocaleString():'₱ ___________'}`,150,finalY);
+
+  doc.setFontSize(8); doc.setFont(undefined,'normal'); doc.setTextColor(100,100,100);
+  doc.text('Thank you for trusting DJ-CE Aircon & Electrical Services! Reliable · Safe · Long-Lasting',105,280,{align:'center'});
+
+  doc.save(`DJCE-Receipt-${b.id}.pdf`);
+  showToast('Receipt downloaded!', 'success');
+  logActivity('📄', `Generated receipt PDF for booking ${b.id}`, 'document');
+}
+
+/* ===========================
+   REVENUE & REPORTS
+=========================== */
+function renderRevenue() {
+  const done = Object.values(BOOKINGS).filter(b=>b.status==='Done');
+  const total = done.reduce((s,b)=>s+(parseFloat(b.amount)||0),0);
+  const thisMonth = done.filter(b=>isThisMonth(b.date)).reduce((s,b)=>s+(parseFloat(b.amount)||0),0);
+  const today = done.filter(b=>isToday(b.date)).reduce((s,b)=>s+(parseFloat(b.amount)||0),0);
+  return `<div class="stats-grid">
+    <div class="stat-card stat-gold"><div class="stat-icon">💰</div><div class="stat-label">Total Revenue</div><div class="stat-value" style="color:var(--accent)">₱${total.toLocaleString()}</div><div class="stat-sub">All completed jobs</div></div>
+    <div class="stat-card stat-success"><div class="stat-icon">📅</div><div class="stat-label">This Month</div><div class="stat-value" style="color:var(--success)">₱${thisMonth.toLocaleString()}</div></div>
+    <div class="stat-card stat-info"><div class="stat-icon">📆</div><div class="stat-label">Today</div><div class="stat-value">₱${today.toLocaleString()}</div></div>
+    <div class="stat-card stat-primary"><div class="stat-icon">🏆</div><div class="stat-label">Completed Jobs</div><div class="stat-value">${done.length}</div></div>
+  </div>
+  <div class="panel">
+    <div class="panel-head"><div class="panel-title">💰 Revenue by Month</div></div>
+    <div class="panel-body">${renderRevenueChart()}</div>
+  </div>
+  <div class="panel">
+    <div class="panel-head"><div class="panel-title">📋 Revenue Breakdown</div></div>
+    <div class="panel-body"><div class="tbl-wrap"><table>
+      <thead><tr><th>Booking ID</th><th>Client</th><th>Service</th><th>Date</th><th>Technician</th><th>Amount</th></tr></thead>
+      <tbody>${done.sort((a,b)=>new Date(b.date)-new Date(a.date)).map(b=>`
+        <tr><td style="font-family:monospace;font-size:11px">${b.id}</td><td>${b.name}</td>
+        <td style="font-size:12px">${b.service}</td><td>${formatDate(b.date)}</td>
+        <td>${b.technician||'—'}</td>
+        <td><strong style="color:var(--accent)">${b.amount?'₱'+parseFloat(b.amount).toLocaleString():'—'}</strong></td></tr>`).join('')||'<tr><td colspan="6"><div class="empty">No revenue data</div></td></tr>'}
+      </tbody>
+    </table></div></div>
+  </div>`;
+}
+
+function renderRevenueChart() {
+  const bks = Object.values(BOOKINGS).filter(b=>b.status==='Done');
+  const months = [];
+  const now = new Date();
+  for (let i=5; i>=0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    const label = d.toLocaleString('default',{month:'short'});
+    const rev = bks.filter(b=>{
+      const bd = new Date(b.date||'');
+      return bd.getMonth()===d.getMonth() && bd.getFullYear()===d.getFullYear();
+    }).reduce((s,b)=>s+(parseFloat(b.amount)||0),0);
+    months.push({label,rev});
+  }
+  const max = Math.max(...months.map(m=>m.rev),1);
+  return `<div class="chart-wrap"><div class="chart-title">Monthly Revenue (₱)</div>
+    <div class="bar-chart">${months.map((m,i)=>`
+      <div class="bar-item">
+        <div class="bar-val" style="font-size:9px;color:var(--accent)">₱${m.rev.toLocaleString()}</div>
+        <div class="bar-fill" style="height:${(m.rev/max)*100}%;background:${i===5?'#f59e0b':'#1a3566'};opacity:${i===5?1:0.7}"></div>
+        <div class="bar-label">${m.label}</div>
+      </div>`).join('')}</div></div>`;
+}
+
+function renderReports() {
+  const bks = Object.values(BOOKINGS);
+  const done = bks.filter(b=>b.status==='Done');
+  const cancelled = bks.filter(b=>b.status==='Cancelled');
+  const techPerf = {};
+  done.forEach(b=>{
+    if (b.technician) {
+      if (!techPerf[b.technician]) techPerf[b.technician]={jobs:0,revenue:0};
+      techPerf[b.technician].jobs++;
+      techPerf[b.technician].revenue+=(parseFloat(b.amount)||0);
+    }
+  });
+  return `<div class="stats-grid">
+    <div class="stat-card stat-success"><div class="stat-icon">✅</div><div class="stat-label">Completion Rate</div><div class="stat-value" style="color:var(--success)">${bks.length?Math.round((done.length/bks.length)*100):0}%</div></div>
+    <div class="stat-card stat-danger"><div class="stat-icon">❌</div><div class="stat-label">Cancellation Rate</div><div class="stat-value" style="color:var(--danger)">${bks.length?Math.round((cancelled.length/bks.length)*100):0}%</div></div>
+    <div class="stat-card stat-gold"><div class="stat-icon">📊</div><div class="stat-label">Total Bookings</div><div class="stat-value">${bks.length}</div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px">
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">📊 Jobs by Month</div></div>
+      <div class="panel-body">${renderMonthlyChart()}</div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">🔧 Service Type Breakdown</div></div>
+      <div class="panel-body">${renderServiceChart()}</div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">💰 Revenue Trend</div></div>
+      <div class="panel-body">${renderRevenueChart()}</div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">👷 Technician Performance</div></div>
+      <div class="panel-body">
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Technician</th><th>Jobs Done</th><th>Revenue</th></tr></thead>
+          <tbody>${Object.entries(techPerf).sort((a,b)=>b[1].jobs-a[1].jobs).map(([t,p])=>`
+            <tr><td>${t}</td><td><strong>${p.jobs}</strong></td><td style="color:var(--accent)">₱${p.revenue.toLocaleString()}</td></tr>`).join('')||'<tr><td colspan="3"><div class="empty" style="padding:10px">No data yet</div></td></tr>'}
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ===========================
+   ACTIVITY LOG
+=========================== */
+function renderActivity() {
+  const logs = ACTIVITY_LOG.slice().reverse();
+  return `<div class="panel">
+    <div class="panel-head"><div class="panel-title">📜 Activity Log</div><button class="btn btn-outline btn-sm" onclick="clearLog()">🗑️ Clear</button></div>
+    <div class="panel-body">
+      ${logs.length?logs.map(l=>`
+        <div class="log-item">
+          <div class="log-icon" style="background:var(--bg-elev2)">${l.icon}</div>
+          <div style="flex:1">
+            <div class="log-text">${l.message}</div>
+            <div style="font-size:11px;color:var(--text-dim)">${l.user} · ${formatTimeAgo(l.timestamp)}</div>
+          </div>
+          <div class="log-time">${new Date(l.timestamp).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})}</div>
+        </div>`).join(''):'<div class="empty"><div class="empty-ic">📜</div>No activity yet</div>'}
+    </div>
+  </div>`;
+}
+
+function logActivity(icon, message, type='general') {
+  ACTIVITY_LOG.push({ icon, message, type, user: session?.name||'System', timestamp: new Date().toISOString() });
+  if (ACTIVITY_LOG.length > 200) ACTIVITY_LOG.shift();
+  saveLocalData();
+}
+
+function clearLog() {
+  confirm2('Clear Log','Clear all activity log entries?','🗑️',()=>{
+    ACTIVITY_LOG=[];
+    saveLocalData();
+    switchView('activity');
+    showToast('Log cleared','info');
+  });
+}
+
+/* ===========================
+   DATA PERSISTENCE
+=========================== */
+function saveLocalData() {
+  localStorage.setItem('djce_bookings', JSON.stringify(BOOKINGS));
+  localStorage.setItem('djce_clients', JSON.stringify(CLIENTS));
+  localStorage.setItem('djce_complaints', JSON.stringify(COMPLAINTS));
+  localStorage.setItem('djce_log', JSON.stringify(ACTIVITY_LOG));
+}
+
+function loadLocalData() {
+  try { BOOKINGS = JSON.parse(localStorage.getItem('djce_bookings')||'{}'); } catch(e) { BOOKINGS={}; }
+  try { CLIENTS = JSON.parse(localStorage.getItem('djce_clients')||'{}'); } catch(e) { CLIENTS={}; }
+  try { COMPLAINTS = JSON.parse(localStorage.getItem('djce_complaints')||'[]'); } catch(e) { COMPLAINTS=[]; }
+  try { ACTIVITY_LOG = JSON.parse(localStorage.getItem('djce_log')||'[]'); } catch(e) { ACTIVITY_LOG=[]; }
+}
+
+/* ===========================
+   GOOGLE SHEETS SYNC
+=========================== */
+/* ─── GOOGLE SHEETS SYNC ENGINE ─────────────────────────── */
+
+function callSheets(params, timeout) {
+  timeout = timeout || 8000;
+  return new Promise(function(resolve) {
+    var cb = 'djceCb' + Date.now() + Math.floor(Math.random()*9999);
+    var s = document.createElement('script');
+    var query = Object.keys(params).map(function(k){
+      return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+    }).join('&');
+    s.src = APPS_SCRIPT_URL + '?' + query + '&cb=' + cb;
+    var done = false;
+    window[cb] = function(data) {
+      if (done) return; done = true;
+      delete window[cb]; s.remove(); resolve(data);
+    };
+    s.onerror = function() {
+      if (done) return; done = true;
+      delete window[cb]; s.remove();
+      resolve({ ok: false, error: 'Network error' });
+    };
+    document.head.appendChild(s);
+    setTimeout(function() {
+      if (done) return; done = true;
+      try { delete window[cb]; s.remove(); } catch(e) {}
+      resolve({ ok: false, error: 'Timeout' });
+    }, timeout);
+  });
+}
+
+async function fetchFromSheets() {
+  const btn = document.getElementById('syncBtn');
+  if (btn) btn.textContent = '⟳ Syncing...';
+
+  try {
+    // 1. Bookings
+    const bkData = await callSheets({ action: 'getBookings' });
+    if (bkData && bkData.ok && bkData.bookings) {
+      bkData.bookings.forEach(function(b) {
+        // Normalize field names from Sheets
+        const id = (b.bookingId || b.id || '').trim();
+        if (!id) return;
+        const normalized = {
+          id: id,
+          name: (b.name || '').trim(),
+          phone: (b.phone || '').trim(),
+          email: (b.email || '').trim(),
+          address: (b.address || '').trim(),
+          landmark: (b.landmark || '').trim(),
+          lat: (b.lat || '').trim(),
+          lng: (b.lng || '').trim(),
+          service: (b.service || b.services || '').trim(),
+          serviceDetails: (b.serviceDetails || '').trim(),
+          date: (b.date || '').trim(),
+          time: (b.time || '').trim(),
+          technician: (b.technician || b.assignedTo || b.assigned || '').trim(),
+          status: (b.status || 'Pending').trim(),
+          amount: (b.amount || '').trim(),
+          usage: (b.usageFrequency || b.usage || '').trim(),
+          nextCleaningDate: (b.nextCleaningDate || '').trim(),
+          notes: (b.notes || '').trim(),
+          source: (b.source || 'website').trim(),
+          followedUp: (b.followedUp || 'false').trim(),
+          completedAt: (b.completedAt || '').trim(),
+          createdAt: (b.createdAt || '').trim(),
+          _synced: true
+        };
+        if (!BOOKINGS[id]) {
+          BOOKINGS[id] = normalized;
+        } else if (BOOKINGS[id]._dirty) {
+          BOOKINGS[id].name = normalized.name || BOOKINGS[id].name;
+          BOOKINGS[id].phone = normalized.phone || BOOKINGS[id].phone;
+          BOOKINGS[id].email = normalized.email || BOOKINGS[id].email;
+          BOOKINGS[id].address = normalized.address || BOOKINGS[id].address;
+          BOOKINGS[id].landmark = normalized.landmark || BOOKINGS[id].landmark;
+          BOOKINGS[id].service = normalized.service || BOOKINGS[id].service;
+          BOOKINGS[id].serviceDetails = normalized.serviceDetails || BOOKINGS[id].serviceDetails;
+          BOOKINGS[id].date = normalized.date || BOOKINGS[id].date;
+          BOOKINGS[id].time = normalized.time || BOOKINGS[id].time;
+          BOOKINGS[id].source = normalized.source || BOOKINGS[id].source;
+          BOOKINGS[id].createdAt = normalized.createdAt || BOOKINGS[id].createdAt;
+          BOOKINGS[id]._synced = true;
+        } else {
+          Object.assign(BOOKINGS[id], normalized);
+        }
+      });
+    }
+
+    // 2. Accounts (sync from Sheets — source of truth for password/forceChange)
+    if (session) {
+      const accData = await callSheets({ action: 'getAccounts' });
+      if (accData && accData.ok && accData.accounts) {
+        Object.entries(accData.accounts).forEach(function([k, v]) {
+          if (!USERS[k]) {
+            USERS[k] = v;
+          } else {
+            // Update password, forceChange, lastPwChange from Sheets
+            if (v.password) USERS[k].password = v.password;
+            if (v.forceChange !== undefined) USERS[k].forceChange = (v.forceChange === 'true' || v.forceChange === true);
+            if (v.lastPwChange) USERS[k].lastPwChange = v.lastPwChange;
+            if (v.role) USERS[k].role = v.role;
+            if (v.name) USERS[k].name = v.name;
+          }
+        });
+        saveAccounts();
+      }
+    }
+
+    // 3. Clients
+    const clData = await callSheets({ action: 'getClients' });
+    if (clData && clData.ok && clData.clients) {
+      clData.clients.forEach(function(c) {
+        const id = c.clientId || c.id;
+        if (!id) return;
+        c.id = id;
+        if (!CLIENTS[id]) CLIENTS[id] = c;
+      });
+    }
+
+    // 4. Complaints
+    const cmpData = await callSheets({ action: 'getComplaints' });
+    if (cmpData && cmpData.ok && cmpData.complaints) {
+      cmpData.complaints.forEach(function(c) {
+        const id = c.complaintId || c.id;
+        if (!id) return;
+        c.id = id;
+        if (!COMPLAINTS.find(x => x.id === id)) COMPLAINTS.push(c);
+      });
+    }
+
+    saveLocalData();
+    if (btn) btn.textContent = '⟳ Sync';
+    updateNavBadges();
+    const active = document.querySelector('.view.active');
+    if (active) { const n = active.id.replace('view-',''); active.innerHTML = renderView(n); }
+    showToast('Synced with Google Sheets ✅', 'success');
+
+  } catch(e) {
+    console.error('Sync error:', e);
+    if (btn) btn.textContent = '⟳ Sync';
+    showToast('Sync failed — working offline 📴', 'warning');
+  }
+}
+
+async function manualSync() { await fetchFromSheets(); }
+
+function syncBookingToSheets(b) {
+  if (!b) return;
+  const action = b._synced ? 'updateBooking' : 'submitBooking';
+  callSheets({ action, data: encodeURIComponent(JSON.stringify(b)) })
+    .then(function(res) { if (res && res.ok) { b._synced = true; b._dirty = false; saveLocalData(); } })
+    .catch(function() {});
+}
+
+function syncClientToSheets(c) {
+  if (!c) return;
+  callSheets({ action: 'saveClient', data: encodeURIComponent(JSON.stringify(c)) })
+    .then(function(res) { if (res && res.ok) { c._dirty = false; saveLocalData(); } })
+    .catch(function() {});
+}
+
+function syncComplaintToSheets(c) {
+  if (!c) return;
+  callSheets({ action: 'saveComplaint', data: encodeURIComponent(JSON.stringify(c)) })
+    .then(function(res) { if (res && res.ok) { c._dirty = false; saveLocalData(); } })
+    .catch(function() {});
+}
+
+function syncActivityToSheets(user, message, type) {
+  callSheets({
+    action: 'logActivity',
+    user: encodeURIComponent(user || 'System'),
+    message: encodeURIComponent(message || ''),
+    type: type || 'general'
+  }).catch(function() {});
+}
+
+function syncAccountToSheets(acc) {
+  if (!acc) return;
+  callSheets({ action: 'saveAccount', data: encodeURIComponent(JSON.stringify(acc)) })
+    .then(function(res) { if (res && res.ok) console.log('Account synced: @' + acc.username); })
+    .catch(function() {});
+}
+function addNotif(msg, type) {
+  const id = 'n' + Date.now();
+  NOTIFS.unshift({ id, msg: msg||'', type: type||'info', read: false, time: new Date().toISOString() });
+  if (NOTIFS.length > 50) NOTIFS.pop();
+  renderNotifs();
+  updateNavBadges();
+}
+
+function renderNotifs() {
+  const unread = NOTIFS.filter(n=>!n.read).length;
+  const dot = document.getElementById('notifDot');
+  if (dot) dot.style.display = unread?'':'none';
+  const list = document.getElementById('notifList');
+  if (!list) return;
+  list.innerHTML = NOTIFS.length?NOTIFS.slice(0,15).map(n=>`
+    <div class="notif-item ${n.read?'':'unread'}" onclick="readNotif(${n.id})">
+      <div class="notif-msg">${n.icon} ${n.msg}</div>
+      <div class="notif-time">${formatTimeAgo(n.time)}</div>
+    </div>`).join(''):`<div class="empty" style="padding:20px">No notifications</div>`;
+}
+function readNotif(id) { const n=NOTIFS.find(x=>x.id===id); if(n) n.read=true; renderNotifs(); }
+function markAllRead() { NOTIFS.forEach(n=>n.read=true); renderNotifs(); }
+function toggleNotif(e) { e?.stopPropagation(); document.getElementById('notifPanel')?.classList.toggle('show'); }
+
+/* ===========================
+   SIDEBAR
+=========================== */
+function toggleSidebarCollapse() {
+  const s = document.getElementById('sidebar');
+  s.classList.toggle('collapsed');
+  document.getElementById('sbCollapseTxt').textContent = s.classList.contains('collapsed')?'→ Expand':'← Collapse';
+}
+function toggleSidebar() {
+  const s=document.getElementById('sidebar'),bd=document.getElementById('sidebarBackdrop');
+  s.classList.toggle('mobile-open');
+  bd.classList.toggle('active');
+}
+function closeSidebar() {
+  document.getElementById('sidebar')?.classList.remove('mobile-open');
+  document.getElementById('sidebarBackdrop')?.classList.remove('active');
+}
+
+/* ===========================
+   MODALS
+=========================== */
+function openModal(id) { document.getElementById(id)?.classList.add('active'); }
+function closeModal(id) { document.getElementById(id)?.classList.remove('active'); }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.querySelectorAll('.modal-bg.active').forEach(m=>m.classList.remove('active')); });
+
+function confirm2(title, msg, icon, onConfirm) {
+  const el = document.createElement('div');
+  el.className='confirm-overlay';
+  el.innerHTML=`<div class="confirm-box">
+    <div class="confirm-icon">${icon}</div>
+    <div class="confirm-title">${title}</div>
+    <div class="confirm-msg">${msg}</div>
+    <div class="confirm-btns">
+      <button class="btn btn-outline" onclick="this.closest('.confirm-overlay').remove()">Cancel</button>
+      <button class="btn btn-gold" id="confirmOk">Confirm</button>
+    </div>
+  </div>`;
+  document.body.appendChild(el);
+  el.querySelector('#confirmOk').onclick=()=>{ el.remove(); onConfirm(); };
+  el.onclick=(e)=>{ if(e.target===el) el.remove(); };
+}
+
+/* ===========================
+   TOAST
+=========================== */
+function showToast(msg, type='info', duration=3500) {
+  const icons={success:'✅',error:'❌',info:'ℹ️',warning:'⚠️'};
+  const t=document.createElement('div');
+  t.className=`toast ${type}`;
+  t.innerHTML=`<span>${icons[type]||'ℹ️'}</span><span>${msg}</span>`;
+  document.getElementById('toastContainer').appendChild(t);
+  setTimeout(()=>{ t.style.opacity='0'; t.style.transform='translateX(100%)'; t.style.transition='all 0.3s'; setTimeout(()=>t.remove(),300); },duration);
+}
+
+/* ===========================
+   UTILS
+=========================== */
+function formatDate(d) {
+  if (!d) return '—';
+  try { return new Date(d+'T00:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}); }
+  catch(e) { return d; }
+}
+function formatTimeAgo(iso) {
+  const d=new Date(iso), n=new Date(), diff=Math.floor((n-d)/1000);
+  if (diff<60) return 'just now';
+  if (diff<3600) return Math.floor(diff/60)+'m ago';
+  if (diff<86400) return Math.floor(diff/3600)+'h ago';
+  return Math.floor(diff/86400)+'d ago';
+}
+function isToday(d) {
+  if (!d) return false;
+  const t=new Date(), td=new Date(d+'T00:00:00');
+  return td.toDateString()===t.toDateString();
+}
+function isThisMonth(d) {
+  if (!d) return false;
+  const n=new Date(), td=new Date(d||'');
+  return td.getMonth()===n.getMonth()&&td.getFullYear()===n.getFullYear();
+}
+function isFuture(d) {
+  if (!d) return false;
+  return new Date(d+'T00:00:00')>=new Date();
+}
+function scrollToTop() { window.scrollTo({top:0,behavior:'smooth'}); }
+
+/* ===========================
+   START
+=========================== */
+document.addEventListener('DOMContentLoaded', init);
+
+/* ===== USAGE FREQUENCY OPTIONS ===== */
+const USAGE_OPTS=[
+  {label:'Daily use (4–5 mos)',months:4.5},
+  {label:'Daytime only (5 mos)',months:5},
+  {label:'Evenings only (6 mos)',months:6},
+  {label:'Weekends only (7 mos)',months:7},
+  {label:'Occasional (8 mos)',months:8},
+  {label:'Rarely used (12 mos)',months:12}
+];
+
+let CLIENTS={};
+
+/* ===== CLEANING CALC ===== */
+function calcNextCleaning(lastDate,usageLabel){
+  if(!lastDate)return null;
+  const opt=USAGE_OPTS.find(u=>u.label===usageLabel);
+  const months=opt?opt.months:3;
+  const d=new Date(lastDate+'T00:00:00');
+  d.setMonth(d.getMonth()+Math.ceil(months));
+  return d.toISOString().split('T')[0];
+}
+
+/* ===== MERGE CLIENTS from bookings + manual ===== */
+function mergeClients(){
+  const map={};
+  // from bookings
+  Object.values(BOOKINGS).forEach(b=>{
+    const key=b.phone||b.name;
+    if(!map[key]){
+      map[key]={
+        id:'BC-'+(b.phone||'').replace(/\D/g,'')||b.name,
+        name:b.name,phone:b.phone||'',email:b.email||'',
+        address:b.address||'',source:'booking',
+        lastServiceDate:b.date||'',lastService:b.service||'',
+        usage:b.usage||'',
+        nextCleaningDate:b.nextCleaningDate||calcNextCleaning(b.date,b.usage||'')
+      };
+    } else if((b.date||'')>(map[key].lastServiceDate||'')){
+      map[key].lastServiceDate=b.date||'';
+      map[key].lastService=b.service||'';
+      if(b.usage)map[key].usage=b.usage;
+      map[key].nextCleaningDate=calcNextCleaning(b.date,b.usage||map[key].usage||'');
+    }
+  });
+  // manual clients override
+  Object.values(CLIENTS).forEach(c=>{
+    const key=c.phone||c.name;
+    map[key]={...map[key],...c,source:'manual'};
+  });
+  return Object.values(map).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+}
+
+/* ===== DUE / FOLLOW-UP ===== */
+function getDueClients(){
+  const today=new Date();
+  return mergeClients().filter(c=>{
+    if(!c.nextCleaningDate)return false;
+    const diff=(new Date(c.nextCleaningDate)-today)/(1000*60*60*24);
+    return diff<=14;
+  }).sort((a,b)=>new Date(a.nextCleaningDate)-new Date(b.nextCleaningDate));
+}
+
+function getFollowUpDue(){
+  const today=new Date();
+  return Object.values(BOOKINGS).filter(b=>{
+    if(b.status!=='Done'||!b.completedAt||b.followedUp)return false;
+    const diff=(today-new Date(b.completedAt))/(1000*60*60*24);
+    return diff>=6&&diff<=10;
+  });
+}
+
+function markFollowedUp(id){
+  if(BOOKINGS[id])BOOKINGS[id].followedUp=true;
+  saveLocalData();
+  logActivity('📱',`Follow-up done for ${id}`,'followup');
+  showToast('Follow-up marked as done!','success');
+  switchView('followup');
+}
+
+/* ===== MONTH OPTIONS ===== */
+function getMonthOptions(){
+  const opts=[];const now=new Date();
+  for(let i=0;i<12;i++){
+    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    const val=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    opts.push('<option value="'+val+'">'+d.toLocaleString('default',{month:'long',year:'numeric'})+'</option>');
+  }
+  return opts.join('');
+}
+
+/* ===== FOLLOW-UP CENTER VIEW ===== */
+function renderFollowup(){
+  const due=getDueClients();
+  const fu=getFollowUpDue();
+  const overdue=due.filter(c=>new Date(c.nextCleaningDate)<new Date());
+  const soon=due.filter(c=>new Date(c.nextCleaningDate)>=new Date());
+  return '<div class="stats-grid">'+
+    '<div class="stat-card stat-danger"><div class="stat-icon">🔴</div><div class="stat-label">Cleaning Overdue</div><div class="stat-value" style="color:var(--danger)">'+overdue.length+'</div></div>'+
+    '<div class="stat-card stat-warning"><div class="stat-icon">⚠️</div><div class="stat-label">Due in ≤14 Days</div><div class="stat-value" style="color:var(--warning)">'+soon.length+'</div></div>'+
+    '<div class="stat-card stat-info"><div class="stat-icon">📱</div><div class="stat-label">After-Sales Follow-up</div><div class="stat-value">'+fu.length+'</div></div>'+
+  '</div>'+
+  '<div class="tabs"><div class="tab active" onclick="showFUTab(this,\'fu-c\')">🧹 Due for Cleaning ('+due.length+')</div><div class="tab" onclick="showFUTab(this,\'fu-f\')">📱 After-Sales ('+fu.length+')</div></div>'+
+  '<div id="fu-c">'+
+    (due.length ? due.map(function(c){
+      const over=new Date(c.nextCleaningDate)<new Date();
+      return '<div style="background:var(--card);border:1px solid var(--border);border-left:4px solid '+(over?'var(--danger)':'var(--warning)')+';border-radius:8px;padding:13px;margin-bottom:8px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">'+
+        '<div><strong style="font-size:14px">'+c.name+'</strong>'+
+        '<div style="font-size:11px;color:var(--text-dim);margin-top:2px">📞 '+(c.phone||'—')+' · 📍 '+(c.address||'—')+'</div>'+
+        '<div style="font-size:11px;color:var(--text-dim)">Last: <strong>'+(c.lastService||'—')+'</strong> on '+formatDate(c.lastServiceDate)+'</div>'+
+        '<div style="font-size:11px;color:var(--text-dim)">Frequency: '+(c.usage||'Not set')+'</div></div>'+
+        '<div style="text-align:right">'+
+        '<span class="status-badge '+(over?'s-cancelled':'s-pending')+'">'+(over?'OVERDUE':'DUE '+formatDate(c.nextCleaningDate))+'</span>'+
+        '<div style="margin-top:7px;display:flex;gap:5px;justify-content:flex-end">'+
+        (c.phone?'<a href="tel:'+c.phone+'" class="btn btn-success btn-xs">📞 Call</a>':'')+
+        '<button class="btn btn-gold btn-xs" onclick="openNewBooking(\''+c.name+'\',\''+c.phone+'\',\''+c.address+'\')">📋 Book Now</button>'+
+        '</div></div></div></div>';
+    }).join('') : '<div class="empty"><div class="empty-ic">✅</div>No clients due for cleaning</div>')+
+  '</div>'+
+  '<div id="fu-f" style="display:none">'+
+    (fu.length ?
+      '<div class="alert-banner alert-info" style="margin-bottom:12px">📱 These clients had service 6–10 days ago. Call to ask how their unit is doing and request a Facebook review!</div>'+
+      fu.map(function(b){
+        return '<div style="background:var(--card);border:1px solid var(--border);border-left:4px solid var(--info);border-radius:8px;padding:13px;margin-bottom:8px">'+
+          '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
+          '<div><strong>'+b.name+'</strong><div style="font-size:11px;color:var(--text-dim)">📞 '+(b.phone||'—')+' · '+b.service+'</div>'+
+          '<div style="font-size:11px;color:var(--text-dim)">Completed: '+formatDate((b.completedAt||b.date).split('T')[0])+'</div></div>'+
+          '<div style="display:flex;gap:5px">'+
+          (b.phone?'<a href="tel:'+b.phone+'" class="btn btn-success btn-xs">📞 Call</a>':'')+
+          '<button class="btn btn-outline btn-xs" onclick="markFollowedUp(\''+b.id+'\')">✅ Done</button>'+
+          '</div></div></div>';
+      }).join('')
+    : '<div class="empty"><div class="empty-ic">📱</div>No after-sales follow-ups due</div>')+
+  '</div>';
+}
+
+function showFUTab(el,show){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');
+  ['fu-c','fu-f'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display=id===show?'':'none';});
+}
+
+/* ===== ADD CLIENT VIEW ===== */
+function openNewClient(){
+  document.getElementById('emTitle').textContent='Add Client Record';
+  document.getElementById('emSub').textContent='Manual entry — old or existing clients';
+  document.getElementById('emBody').innerHTML=
+    '<div class="form-grid">'+
+    '<div class="field form-full"><label>Full Name *</label><input id="nc_name" placeholder="e.g. Maria Santos"></div>'+
+    '<div class="field"><label>Phone *</label><input id="nc_phone" placeholder="09171234567" type="tel"></div>'+
+    '<div class="field"><label>Email</label><input id="nc_email" type="email" placeholder="maria@email.com"></div>'+
+    '<div class="field form-full"><label>Address</label><input id="nc_address" placeholder="House/Street/Barangay/City"></div>'+
+    '<div class="field"><label>Last Service Done</label><input id="nc_lastSvc" placeholder="e.g. Aircon Cleaning – Split Type"></div>'+
+    '<div class="field"><label>Last Service Date</label><input type="date" id="nc_lastDate"></div>'+
+    '<div class="field"><label>AC Usage Frequency *</label><select id="nc_usage"><option value="">— Select —</option>'+
+    USAGE_OPTS.map(u=>'<option>'+u.label+'</option>').join('')+
+    '</select></div>'+
+    '<div class="field"><label>Notes (unit info, brand, etc.)</label><input id="nc_notes" placeholder="e.g. Kolin 1.5HP, 2nd floor"></div>'+
+    '</div>'+
+    '<div style="background:var(--info-soft);border:1px solid var(--info);border-radius:8px;padding:10px 12px;font-size:12px;margin-top:6px">'+
+    '💡 Next cleaning date will be auto-calculated based on usage frequency. Perfect for importing old clients!</div>';
+  document.getElementById('emFoot').innerHTML=
+    '<button class="btn btn-outline btn-sm" onclick="closeModal(\'editModal\')">Cancel</button>'+
+    '<button class="btn btn-gold btn-sm" onclick="saveNewClient()">💾 Save Client</button>';
+  openModal('editModal');
+}
+
+function saveNewClient(){
+  const name=document.getElementById('nc_name')?.value?.trim();
+  const phone=document.getElementById('nc_phone')?.value?.trim();
+  if(!name||!phone){showToast('Name and phone are required','error');return;}
+  const lastDate=document.getElementById('nc_lastDate')?.value||'';
+  const usage=document.getElementById('nc_usage')?.value||'';
+  const id='CL-'+Date.now();
+  CLIENTS[id]={
+    id,name,phone,email:document.getElementById('nc_email')?.value||'',
+    address:document.getElementById('nc_address')?.value||'',
+    lastService:document.getElementById('nc_lastSvc')?.value||'',
+    lastServiceDate:lastDate,usage,
+    notes:document.getElementById('nc_notes')?.value||'',
+    nextCleaningDate:calcNextCleaning(lastDate,usage),
+    source:'manual',createdAt:new Date().toISOString()
+  };
+  saveLocalData();
+  logActivity('👤','Added client: '+name,'client');
+  syncClientToSheets(CLIENTS[id]);
+  closeModal('editModal');
+  showToast('Client '+name+' added!','success');
+  switchView('clients');
+}
+
+function openClientModal(key){
+  const all=mergeClients();
+  const c=all.find(x=>x.phone===key||x.name===key||x.id===key);
+  if(!c){showToast('Client not found','error');return;}
+  const bks=Object.values(BOOKINGS).filter(b=>b.phone===c.phone||b.name===c.name);
+  document.getElementById('clmTitle').textContent=c.name;
+  document.getElementById('clmSub').textContent=bks.length+' booking(s) · '+(c.source==='manual'?'Manual entry':'From bookings');
+  document.getElementById('clmBody').innerHTML=
+    '<div class="form-grid">'+
+    '<div><div class="sec-divider">Client Info</div>'+
+    '<div class="info-row"><span class="info-label">Name</span><strong>'+c.name+'</strong></div>'+
+    '<div class="info-row"><span class="info-label">Phone</span>'+(c.phone||'—')+'</div>'+
+    '<div class="info-row"><span class="info-label">Email</span>'+(c.email||'—')+'</div>'+
+    '<div class="info-row"><span class="info-label">Address</span>'+(c.address||'—')+'</div>'+
+    '<div class="info-row"><span class="info-label">Notes</span>'+(c.notes||'—')+'</div></div>'+
+    '<div><div class="sec-divider">Service Tracking</div>'+
+    '<div class="info-row"><span class="info-label">Last Service</span>'+(c.lastService||'—')+'</div>'+
+    '<div class="info-row"><span class="info-label">Last Date</span>'+formatDate(c.lastServiceDate)+'</div>'+
+    '<div class="info-row"><span class="info-label">Usage Freq.</span>'+(c.usage||'Not set')+'</div>'+
+    '<div class="info-row"><span class="info-label">Next Cleaning</span><strong style="color:var(--accent)">'+(c.nextCleaningDate?formatDate(c.nextCleaningDate):'Not set')+'</strong></div>'+
+    '</div></div>'+
+    '<div class="sec-divider" style="margin-top:14px">Booking History ('+bks.length+')</div>'+
+    (bks.length ? '<div class="tbl-wrap"><table><thead><tr><th>ID</th><th>Service</th><th>Date</th><th>Status</th><th>Amount</th></tr></thead><tbody>'+
+    bks.sort((a,b)=>new Date(b.date)-new Date(a.date)).map(b=>
+      '<tr><td style="font-family:monospace;font-size:10.5px;color:var(--accent)">'+b.id+'</td>'+
+      '<td style="font-size:12px">'+b.service+'</td><td>'+formatDate(b.date)+'</td>'+
+      '<td><span class="status-badge s-'+(b.status||'pending').toLowerCase()+'">'+b.status+'</span></td>'+
+      '<td>'+(b.amount?'₱'+parseFloat(b.amount).toLocaleString():'—')+'</td></tr>'
+    ).join('')+'</tbody></table></div>' :
+    '<div class="empty" style="padding:14px">No bookings on record</div>');
+  document.getElementById('clmFoot').innerHTML=
+    '<button class="btn btn-outline btn-sm" onclick="closeModal(\'clientModal\')">Close</button>'+
+    '<button class="btn btn-gold btn-sm" onclick="openNewBooking(\''+c.name+'\',\''+c.phone+'\',\''+c.address+'\');closeModal(\'clientModal\')">📋 New Booking</button>';
+  openModal('clientModal');
+}
+
+
+/* ===== SETTINGS & ACCOUNTS ===== */
+function renderSettings(){
+  const me = USERS[session.username];
+  const isOwner = session.role === 'owner';
+  const now = new Date();
+  const lastChange = me.lastPwChange ? new Date(me.lastPwChange) : null;
+  const daysAgo = lastChange ? Math.floor((now-lastChange)/(1000*60*60*24)) : null;
+  const daysLeft = daysAgo !== null ? 90 - daysAgo : 0;
+  const expiring = daysLeft <= 14;
+  return `<div style="width:100%">
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">👤 My Account</div></div>
+      <div class="panel-body">
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px">
+          <div style="width:52px;height:52px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#0d1f3c;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px">${session.avatar}</div>
+          <div><div style="font-size:17px;font-weight:800">${me.name}</div><div style="font-size:12px;color:var(--text-dim)">${getRoleLabel(session.role)} · @${session.username}</div></div>
+        </div>
+        <div class="sec-divider">Change Display Name</div>
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          <input id="set_name" value="${me.name}" placeholder="Your display name" style="flex:1;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none">
+          <button class="btn btn-gold btn-sm" onclick="saveName()">💾 Save</button>
+        </div>
+        <div class="sec-divider">Change Password</div>
+        ${expiring ? '<div class="alert-banner alert-warning" style="margin-bottom:12px">⚠️ Your password '+(daysLeft<=0?'has expired!':'expires in '+daysLeft+' day(s).')+' Please change it now.</div>' : ''}
+        ${lastChange ? '<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">Last changed: '+formatDate(me.lastPwChange.split('T')[0])+' ('+daysAgo+' days ago · '+Math.max(0,daysLeft)+' days left)</div>' : '<div style="font-size:12px;color:var(--danger);margin-bottom:12px">⚠️ You have never changed your password.</div>'}
+        <div class="form-grid">
+          <div class="field"><label>Current Password</label><input type="password" id="set_curpw" placeholder="Enter current password" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"></div>
+          <div></div>
+          <div class="field"><label>New Password</label><input type="password" id="set_newpw" placeholder="At least 6 characters" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"></div>
+          <div class="field"><label>Confirm New Password</label><input type="password" id="set_conpw" placeholder="Re-enter new password" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"></div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="changeMyPassword()">🔑 Update Password</button>
+      </div>
+    </div>
+    ${isOwner ? renderAccountsManager() : ''}
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">🛡️ Password Policy</div></div>
+      <div class="panel-body" style="font-size:13px;line-height:2.2">
+        <div>🔄 Passwords expire every <strong>90 days</strong></div>
+        <div>🔑 Minimum <strong>6 characters</strong> required</div>
+        <div>⚠️ Forced change on <strong>first login</strong> or after expiry</div>
+        <div>👑 Only the <strong>Owner</strong> can add/remove accounts</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderAccountsManager(){
+  return `<div class="panel">
+    <div class="panel-head">
+      <div class="panel-title">Manage Portal Accounts (${Object.keys(USERS).length})</div>
+      <button class="btn btn-gold btn-sm" onclick="openAddAccount()">Add Account</button>
+    </div>
+    <div class="panel-body">
+      <div class="tbl-wrap"><table id="accTable">
+        <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Last Pw Change</th><th>Pw Status</th><th>Actions</th></tr></thead>
+        <tbody>${buildAccRows()}</tbody>
+      </table></div>
+    </div>
+  </div>`;
+}
+
+function buildAccRows(){
+  return Object.values(USERS).map(function(u){
+    var lc = u.lastPwChange ? new Date(u.lastPwChange) : null;
+    var dl = lc ? 90 - Math.floor((new Date()-lc)/(1000*60*60*24)) : -1;
+    var isMe = u.username === session.username;
+    var isOwnerAcc = u.role === 'owner';
+    var badge = u.forceChange ? '<span class="status-badge s-pending">Force Reset</span>'
+      : dl<=0 ? '<span class="status-badge s-cancelled">Expired</span>'
+      : dl<=14 ? '<span class="status-badge s-pending">Expiring '+dl+'d</span>'
+      : '<span class="status-badge s-done">OK '+dl+'d left</span>';
+    var roleBadgeMap={
+      owner:'<span class="status-badge s-done">👑 Owner</span>',
+      admin:'<span class="status-badge s-confirmed">🛠️ Admin</span>',
+      sales:'<span class="status-badge" style="background:rgba(16,185,129,.15);color:var(--success)">📊 Sales</span>',
+      marketing:'<span class="status-badge" style="background:rgba(139,92,246,.15);color:#a78bfa">📢 Marketing</span>',
+      sr_tech:'<span class="status-badge s-pending">👷 Sr. Tech</span>',
+      jr_tech:'<span class="status-badge s-pending">🔧 Jr. Tech</span>',
+      helper:'<span class="status-badge" style="background:rgba(100,116,139,.15);color:var(--muted)">🔩 Helper</span>',
+      others:'<span class="status-badge" style="background:rgba(100,116,139,.15);color:var(--muted)">👤 Others</span>'
+    };
+    var roleBadge = roleBadgeMap[u.role]||('<span class="status-badge">'+u.role+'</span>');
+    var actions = isMe
+      ? '<em style="font-size:11px;color:var(--text-dim)">Current user</em>'
+      : '<button class="btn btn-primary btn-xs" data-acc-edit="'+u.username+'">Edit</button> '
+        +'<button class="btn btn-outline btn-xs" data-acc-reset="'+u.username+'">Reset Pw</button>'
+        +(!isOwnerAcc ? ' <button class="btn btn-danger btn-xs" data-acc-del="'+u.username+'">Remove</button>' : '');
+    return '<tr>'
+      +'<td style="font-family:monospace;font-size:12px;color:var(--accent)">@'+u.username+'</td>'
+      +'<td><strong>'+u.name+'</strong></td>'
+      +'<td>'+roleBadge+'</td>'
+      +'<td style="font-size:12px">'+(lc?formatDate(u.lastPwChange.split('T')[0]):'<span style="color:var(--danger)">Never</span>')+'</td>'
+      +'<td>'+badge+'</td>'
+      +'<td style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;padding:8px 10px">'+actions+'</td>'
+      +'</tr>';
+  }).join('');
+}
+
+function openEditAccount(username){
+  var u = USERS[username];
+  if(!u){ showToast('Account not found','error'); return; }
+  document.getElementById('emTitle').textContent = 'Edit Account';
+  document.getElementById('emSub').textContent = '@'+username;
+  var isOwner = u.role === 'owner';
+  document.getElementById('emBody').innerHTML = '<div class="form-grid">'
+    +'<div class="field"><label>Username'+(isOwner?' (locked)':'')+'</label>'
+    +'<input id="ea_user" value="'+u.username+'" placeholder="lowercase only"'+(isOwner?' readonly style="opacity:.7;background:var(--bg-elev2)"':'')+'></div>'
+    +'<div class="field"><label>Display Name</label>'
+    +'<input id="ea_name" value="'+u.name+'" placeholder="Full name"></div>'
+    +'<div class="field"><label>Role'+(isOwner?' (locked)':'')+'</label>'
+    +'<select id="ea_role"'+(isOwner?' disabled':'')+'>'+
+    (isOwner?'<option value="owner" selected>Owner</option>':'')+
+    '<option value="admin"'+(u.role==='admin'?' selected':'')+'>Admin/Dispatcher</option>'+
+    '<option value="sales"'+(u.role==='sales'?' selected':'')+'>Sales</option>'+
+    '<option value="marketing"'+(u.role==='marketing'?' selected':'')+'>Marketing</option>'+
+    '<option value="sr_tech"'+(u.role==='sr_tech'?' selected':'')+'>Sr. Technician</option>'+
+    '<option value="jr_tech"'+(u.role==='jr_tech'?' selected':'')+'>Jr. Technician</option>'+
+    '<option value="helper"'+(u.role==='helper'?' selected':'')+'>Helper</option>'+
+    '<option value="others"'+(u.role==='others'?' selected':'')+'>Others</option>'+
+    '</select></div>'
+    +'<div class="field"><label>New Password <span style="font-weight:400;color:var(--text-dim)">(blank = no change)</span></label>'
+    +'<input type="password" id="ea_pw" placeholder="Min. 6 chars"></div>'
+    +'</div>';
+  document.getElementById('emFoot').innerHTML =
+    '<button class="btn btn-outline btn-sm" data-close-modal="editModal">Cancel</button> '
+    +'<button class="btn btn-gold btn-sm" data-save-edit="'+username+'">Save Changes</button>';
+  openModal('editModal');
+}
+
+function saveEditAccount(oldUsername){
+  var u = USERS[oldUsername];
+  if(!u) return;
+  var newU = (document.getElementById('ea_user')?.value||'').trim().toLowerCase();
+  var name = (document.getElementById('ea_name')?.value||'').trim();
+  var role = document.getElementById('ea_role')?.value || u.role;
+  var pw = document.getElementById('ea_pw')?.value||'';
+  if(!newU||!name){ showToast('Username and name are required','error'); return; }
+  if(!/^[a-z0-9_]+$/.test(newU)){ showToast('Username: lowercase, numbers, underscore only','error'); return; }
+  if(pw && pw.length<6){ showToast('Password must be at least 6 characters','error'); return; }
+  if(newU!==oldUsername && USERS[newU]){ showToast('Username @'+newU+' already taken','error'); return; }
+  var updated = Object.assign({}, u, {
+    username: newU, name: name,
+    role: u.role==='owner' ? 'owner' : role
+  });
+  if(pw){ updated.password=pw; updated.lastPwChange=new Date().toISOString(); updated.forceChange=false; }
+  if(newU!==oldUsername) delete USERS[oldUsername];
+  USERS[newU] = updated;
+  saveAccounts();
+  logActivity('Edit account: @'+oldUsername+(newU!==oldUsername?' to @'+newU:''), 'settings');
+  closeModal('editModal');
+  showToast('Account updated!','success');
+  switchView('settings');
+}
+
+function forceReset(username){
+  var u = USERS[username];
+  if(!u) return;
+  confirm2('Force Password Reset', u.name+' will be required to set a new password on next login.','🔄',function(){
+    USERS[username].forceChange = true;
+    USERS[username].lastPwChange = null;
+    saveAccounts();
+    logActivity('Forced password reset for @'+username,'settings');
+    showToast('@'+username+' must change password on next login','success');
+    switchView('settings');
+  });
+}
+
+function removeAccount(username){
+  if(username==='owner'){ showToast('Cannot remove the owner account','error'); return; }
+  var u = USERS[username];
+  if(!u) return;
+  confirm2('Remove Account','Permanently remove @'+username+' ('+u.name+')? They will lose access immediately.','🗑️',function(){
+    delete USERS[username];
+    saveAccounts();
+    logActivity('Removed account @'+username,'settings');
+    showToast('Account @'+username+' removed','success');
+    switchView('settings');
+  });
+}
+
+
+function saveName(){
+  const n=document.getElementById('set_name')?.value?.trim();
+  if(!n){showToast('Please enter a name','error');return;}
+  USERS[session.username].name=n;session.name=n;
+  localStorage.setItem('djce_session',JSON.stringify(session));
+  saveAccounts();
+  document.getElementById('userDisplayName').textContent=n;
+  logActivity('✏️',session.name+' updated display name','settings');
+  showToast('Display name updated!','success');
+  switchView('settings');
+}
+
+function changeMyPassword(){
+  const cur=document.getElementById('set_curpw')?.value;
+  const np=document.getElementById('set_newpw')?.value;
+  const cp=document.getElementById('set_conpw')?.value;
+  if(!cur||!np||!cp){showToast('Please fill in all fields','error');return;}
+  if(USERS[session.username].password!==cur){showToast('Current password is incorrect','error');return;}
+  if(np.length<6){showToast('New password must be at least 6 characters','error');return;}
+  if(np!==cp){showToast('Passwords do not match','error');return;}
+  if(np===cur){showToast('New password must be different from current','error');return;}
+  USERS[session.username].password=np;
+  USERS[session.username].lastPwChange=new Date().toISOString();
+  USERS[session.username].forceChange=false;
+  saveAccounts();
+  syncAccountToSheets({username:session.username, password:np, lastPwChange:USERS[session.username].lastPwChange, forceChange:false});
+  logActivity('🔑',session.name+' changed password','settings');
+  showToast('Password changed successfully! ✅','success');
+  switchView('settings');
+}
+
+function showForcedPwChange(isFirst=false){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('forcedPwScreen').style.display='flex';
+  document.getElementById('fpwTitle').textContent=isFirst?'Set Your Password':'Password Expired';
+  document.getElementById('fpwMsg').textContent=isFirst
+    ?'For security, please set your own password before continuing.'
+    :'Your password has expired (90 days). Please set a new password to continue.';
+}
+
+function submitForcedPw(){
+  const np=document.getElementById('fpw_new').value;
+  const cp=document.getElementById('fpw_confirm').value;
+  const err=document.getElementById('fpwErr');
+  err.style.display='none';
+  if(!np||np.length<6){err.textContent='Password must be at least 6 characters.';err.style.display='block';return;}
+  if(np!==cp){err.textContent='Passwords do not match.';err.style.display='block';return;}
+  USERS[session.username].password=np;
+  USERS[session.username].lastPwChange=new Date().toISOString();
+  USERS[session.username].forceChange=false;
+  saveAccounts();
+  syncAccountToSheets({username:session.username, password:np, lastPwChange:USERS[session.username].lastPwChange, forceChange:false});
+  logActivity('🔑',session.name+' set new password (forced)','auth');
+  document.getElementById('forcedPwScreen').style.display='none';
+  showPortal();
+  showToast('Password updated! Welcome! 🎉','success');
+}
+
+function forceReset(username){
+  confirm2('Force Password Reset','Require @'+username+' ('+USERS[username]?.name+') to change password on next login.','🔄',()=>{
+    USERS[username].forceChange=true;USERS[username].lastPwChange=null;
+    saveAccounts();
+    logActivity('🔄','Owner forced reset for @'+username,'settings');
+    showToast('Password reset forced for @'+username,'success');
+    switchView('settings');
+  });
+}
+
+function removeAccount(username){
+  if(username==='owner'){showToast('Cannot remove the owner account','error');return;}
+  confirm2('Remove Account','Remove @'+username+' ('+USERS[username]?.name+')? This cannot be undone.','🗑️',()=>{
+    const name=USERS[username]?.name;
+    delete USERS[username];saveAccounts();
+    logActivity('🗑️','Removed account @'+username+' ('+name+')','settings');
+    showToast('Account removed','success');
+    switchView('settings');
+  });
+}
+
+function openAddAccount(){
+  document.getElementById('emTitle').textContent='Add Portal Account';
+  document.getElementById('emSub').textContent='Owner can add admin or technician accounts';
+  document.getElementById('emBody').innerHTML=`
+    <div class="form-grid">
+      <div class="field"><label>Username *</label><input id="ac_user" placeholder="e.g. tech4 (lowercase only)"></div>
+      <div class="field"><label>Display Name *</label><input id="ac_name" placeholder="e.g. Helper 3"></div>
+      <div class="field"><label>Role *</label><select id="ac_role"><option value="admin">🛠️ Admin/Dispatcher</option><option value="tech">👷 Technician</option></select></div>
+      <div class="field"><label>Temporary Password *</label><input type="password" id="ac_pw" placeholder="Min. 6 characters"></div>
+    </div>
+    <div style="background:var(--info-soft);border:1px solid var(--info);border-radius:8px;padding:10px 12px;font-size:12px;margin-top:8px;color:var(--info)">
+      💡 User will be required to change their password on first login.
+    </div>`;
+  document.getElementById('emFoot').innerHTML=`
+    <button class="btn btn-outline btn-sm" onclick="closeModal('editModal')">Cancel</button>
+    <button class="btn btn-gold btn-sm" onclick="saveNewAccount()">💾 Create Account</button>`;
+  openModal('editModal');
+}
+
+function saveNewAccount(){
+  const u=document.getElementById('ac_user')?.value?.trim().toLowerCase();
+  const n=document.getElementById('ac_name')?.value?.trim();
+  const r=document.getElementById('ac_role')?.value;
+  const p=document.getElementById('ac_pw')?.value;
+  if(!u||!n||!p){showToast('Fill in all required fields','error');return;}
+  if(p.length<6){showToast('Password must be at least 6 characters','error');return;}
+  if(USERS[u]){showToast('Username @'+u+' already exists','error');return;}
+  if(!/^[a-z0-9_]+$/.test(u)){showToast('Username: lowercase letters, numbers, underscore only','error');return;}
+  const initials=n.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+  USERS[u]={username:u,password:p,name:n,role:r,avatar:initials,lastPwChange:null,forceChange:true};
+  saveAccounts();
+  logActivity('➕','Owner created account @'+u+' ('+n+')','settings');
+  closeModal('editModal');
+  showToast('Account @'+u+' created! They must change password on first login.','success');
+  switchView('settings');
+}
+
+
+/* ===== PWA INSTALL ===== */
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  const btn = document.getElementById('pwaInstallBtn');
+  if (btn) btn.style.display = '';
+});
+function installPWA() {
+  if (!deferredPrompt) {
+    showToast('To install: tap Share → Add to Home Screen (iOS) or use browser menu → Install App (Android/Chrome)', 'info', 6000);
+    return;
+  }
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(r => {
+    if (r.outcome === 'accepted') showToast('DJ-CE Portal installed! 🎉', 'success');
+    deferredPrompt = null;
+    const btn = document.getElementById('pwaInstallBtn');
+    if (btn) btn.style.display = 'none';
+  });
+}
+
+
+function toggleUserMenu() {
+  const menu = document.getElementById('userMenu');
+  if (menu) menu.style.display = menu.style.display === 'none' ? '' : 'none';
+}
+function closeUserMenu() {
+  const menu = document.getElementById('userMenu');
+  if (menu) menu.style.display = 'none';
+}
+
+// Global event delegation for dynamic buttons
+document.addEventListener('click', function(e){
+  var el = e.target.closest('[data-acc-edit],[data-acc-reset],[data-acc-del],[data-close-modal],[data-save-edit]');
+  if(!el) return;
+  if(el.dataset.accEdit) openEditAccount(el.dataset.accEdit);
+  if(el.dataset.accReset) forceReset(el.dataset.accReset);
+  if(el.dataset.accDel) removeAccount(el.dataset.accDel);
+  if(el.dataset.closeModal) closeModal(el.dataset.closeModal);
+  if(el.dataset.saveEdit) saveEditAccount(el.dataset.saveEdit);
+});
+</script>
+</body>
+</html>
