@@ -117,7 +117,7 @@ body::after {
   box-shadow: 0 24px 60px var(--shadow);
   border: 1px solid var(--border);
 }
-@media(max-width:760px){ .login-card{grid-template-columns:1fr} .login-left{display:none} }
+@media(max-width:760px){ .login-card{grid-template-columns:1fr} .login-left{display:none} .login-right{padding:28px 20px!important} }
 
 .login-left {
   background: linear-gradient(135deg, #0a1220 0%, #0d1f3c 50%, #1a3566 100%);
@@ -658,7 +658,7 @@ tr:hover td { background:var(--bg-elev2); }
       <div class="login-right">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
           <div class="login-head" style="margin:0">
-            <h1>Welcome back! 👋</h1>
+            <h1 id="loginTitle" onclick="handleEmergencyTap()">Welcome back! 👋</h1>
             <p>Sign in to your DJ-CE portal</p>
           </div>
           <button class="icon-btn" onclick="toggleTheme()" id="themeBtn" title="Toggle theme">🌙</button>
@@ -680,14 +680,14 @@ tr:hover td { background:var(--bg-elev2); }
 
         <!-- Remember Me -->
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:2px;margin-bottom:4px">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-dim);user-select:none">
-            <div style="position:relative;width:38px;height:20px" onclick="toggleRememberMe()">
-              <input type="checkbox" id="rememberMe" style="opacity:0;position:absolute;width:0;height:0">
-              <div id="rememberSlider" style="position:absolute;inset:0;border-radius:20px;background:var(--border);transition:background .2s;cursor:pointer"></div>
+          <div style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text-dim);user-select:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation;min-height:44px" onclick="toggleRememberMe()">
+            <div style="position:relative;width:38px;height:20px;flex-shrink:0">
+              <input type="checkbox" id="rememberMe" style="opacity:0;position:absolute;width:0;height:0;pointer-events:none">
+              <div id="rememberSlider" style="position:absolute;inset:0;border-radius:20px;background:var(--border);transition:background .2s"></div>
               <div id="rememberKnob" style="position:absolute;left:2px;top:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.3)"></div>
             </div>
-            Remember me on this device
-          </label>
+            <span>Remember me on this device</span>
+          </div>
           <span id="savedUserBadge" style="display:none;font-size:11px;color:var(--accent);background:var(--accent-soft);padding:3px 8px;border-radius:10px"></span>
         </div>
 
@@ -811,6 +811,8 @@ tr:hover td { background:var(--bg-elev2); }
     <div id="view-my-jobs" class="view"></div>
     <div id="view-trash" class="view"></div>
     <div id="view-archive" class="view"></div>
+    <div id="view-accounting" class="view"></div>
+    <div id="view-unitsales" class="view"></div>
   </div>
 </div>
 </div>
@@ -924,6 +926,21 @@ tr:hover td { background:var(--bg-elev2); }
   </div>
 </div>
 
+<!-- Quotation Edit Modal -->
+<div class="modal-bg" id="quotationModal">
+  <div class="modal wide">
+    <div class="modal-head">
+      <div><div class="modal-title">📋 Edit Quotation</div><div class="modal-sub" id="qtSub">Review and edit before downloading</div></div>
+      <button class="modal-close" onclick="closeModal('quotationModal')">✕</button>
+    </div>
+    <div class="modal-body" id="qtBody" style="max-height:65vh;overflow-y:auto"></div>
+    <div class="modal-foot">
+      <button class="btn btn-outline btn-sm" onclick="closeModal('quotationModal')">Cancel</button>
+      <button class="btn btn-gold btn-sm" onclick="downloadQuotationFromModal()">⬇️ Download PDF</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ===========================
    DATA & CONFIG
@@ -951,6 +968,21 @@ function loadAccounts() {
 
 function saveAccounts() {
   localStorage.setItem('djce_accounts', JSON.stringify(USERS));
+}
+
+// Emergency reset — tap "Welcome back" title 5x within 3 seconds
+let _emergTaps = 0, _emergTimer = null;
+function handleEmergencyTap() {
+  _emergTaps++;
+  if (_emergTaps === 1) _emergTimer = setTimeout(function(){ _emergTaps = 0; }, 3000);
+  if (_emergTaps >= 5) {
+    clearTimeout(_emergTimer); _emergTaps = 0;
+    if (confirm('🔑 Emergency Reset\n\nReset all accounts to default credentials?\n\nowner / djce2025\nadmin / admin2025\ntech1-3 / tech2025')) {
+      localStorage.removeItem('djce_accounts');
+      loadAccounts();
+      alert('✅ Accounts reset!\n\nLogin with:\nowner / djce2025');
+    }
+  }
 }
 
 function isPwExpired(acc) {
@@ -1013,6 +1045,18 @@ let ARCHIVED_BOOKINGS = {};
 let EXPENSES = [];
 let BOOKING_PHOTOS = {};
 let SCHEDULE_SLOTS = []; // { slotId, date, timeSlot, label, time, maxBookings, currentBookings, remaining, status }
+
+// Accounting module data (local, saved to localStorage)
+let ACCT_EMPLOYEES = []; // { id, name, role, type:'fixed'|'commission'|'oncall'|'investor', dailyRate, notes }
+let ACCT_DAILY_LOG = []; // { id, date, employeeId, jobsDone, classification:'half'|'full'|'ot', auditedBy, notes }
+let ACCT_PAYROLL = [];   // { id, period, employeeId, daysWorked, halfDays, fullDays, otDays, gross, deductions, net, status:'draft'|'released' }
+let ACCT_INVESTORS = []; // { id, name, percentage, notes }
+let ACCT_13TH_MONTH = []; // { id, employeeId, year, monthly:[], total, status:'accumulating'|'released' }
+let _acctTab = 'employees'; // current accounting sub-tab
+
+// Unit Sales module data (localStorage)
+let UNIT_PRODUCTS = [];  // { id, brand, model, type, hp, price, stock, notes }
+let UNIT_SALES = [];     // { id, date, productId, qty, unitPrice, totalPrice, buyer, phone, notes, soldBy }
 
 /* ===========================
    INIT / THEME
@@ -1182,6 +1226,7 @@ function showPortal() {
   document.getElementById('userDisplayName').textContent = session.name;
   document.getElementById('userDisplayRole').textContent = getRoleLabel(session.role);
   buildNav();
+  loadAcctData();
   switchView('dashboard');
   fetchFromSheets();
   // PIN: if PIN is set, lock immediately on load; if not, ask to set one
@@ -1250,7 +1295,9 @@ function buildNav() {
   if (isOwner) {
     h += `<div class="nav-sec">Reports</div>
     <div class="nav-item" data-tip="Revenue" onclick="switchView('revenue',event)"><span class="ic">💰</span><span class="nav-label">Revenue</span></div>
-    <div class="nav-item" data-tip="Reports" onclick="switchView('reports',event)"><span class="ic">📈</span><span class="nav-label">Reports & Charts</span></div>`;
+    <div class="nav-item" data-tip="Reports" onclick="switchView('reports',event)"><span class="ic">📈</span><span class="nav-label">Reports & Charts</span></div>
+    <div class="nav-item" data-tip="Accounting" onclick="switchView('accounting',event)"><span class="ic">🧮</span><span class="nav-label">Accounting</span></div>
+    <div class="nav-item" data-tip="Unit Sales" onclick="switchView('unitsales',event)"><span class="ic">🏷️</span><span class="nav-label">Unit Sales</span></div>`;
   }
 
   if (isSales) {
@@ -1314,7 +1361,7 @@ function updatePageTitle(name) {
     clients:'Clients', schedule:'Schedule', complaints:'Complaints & Warranty',
     receipts:'Service Receipts', revenue:'Revenue', reports:'Reports & Charts',
     activity:'Activity Log', 'my-jobs':'My Assigned Jobs', settings:'Settings & Account',
-    trash:'🗑️ Trash', archive:'📦 Archive', followup:'Follow-up Center'
+    trash:'🗑️ Trash', archive:'📦 Archive', followup:'Follow-up Center', accounting:'Accounting', unitsales:'Unit Sales'
   };
   document.getElementById('pageTitle').textContent = titles[name] || name;
 }
@@ -1336,6 +1383,8 @@ function renderView(name) {
     case 'my-jobs': return session.role==='sr_tech'?renderTechDash():renderMyJobs();
     case 'trash': return renderTrash();
     case 'archive': return renderArchive();
+    case 'accounting': return renderAccounting();
+    case 'unitsales': return renderUnitSales();
     default: return '<div class="empty"><div class="empty-ic">🚧</div>Coming soon</div>';
   }
 }
@@ -1368,6 +1417,21 @@ function renderDashboard() {
   const mthNet     = mthGross - mthExp;
   const allGross   = done.reduce((s,b)=>s+(parseFloat(b.amount)||0),0);
   const todayRev   = done.filter(b=>isToday(b.date)).reduce((s,b)=>s+(parseFloat(b.amount)||0),0);
+
+  // OPEX by category (month)
+  const mthExpArr = EXPENSES.filter(e=>e.date&&e.date>=mFrom);
+  const opexByCat = {};
+  mthExpArr.forEach(e=>{ const c=e.category||'Other'; opexByCat[c]=(opexByCat[c]||0)+(parseFloat(e.amount)||0); });
+  const opexCatSorted = Object.entries(opexByCat).sort((a,b)=>b[1]-a[1]);
+  const opexCatMax = Math.max(...opexCatSorted.map(x=>x[1]),1);
+
+  // For Follow-up (next cleaning within 7 days or overdue)
+  const followUps = Object.values(BOOKINGS).filter(b=>{
+    if(!b.nextCleaningDate||b.status==='Cancelled'||b.status==='Deleted') return false;
+    const ncd = new Date(b.nextCleaningDate+'T00:00:00');
+    const diff = Math.ceil((ncd - now)/(1000*60*60*24));
+    return diff <= 7;
+  }).sort((a,b)=>(a.nextCleaningDate||'').localeCompare(b.nextCleaningDate||'')).slice(0,8);
 
   // This week schedule (next 7 days)
   const weekSched = allBks.filter(b=>{
@@ -1438,6 +1502,11 @@ function renderDashboard() {
       <div class="stat-icon">🏆</div><div class="stat-label">All-Time Revenue</div>
       <div class="stat-value" style="font-size:18px">₱${allGross.toLocaleString()}</div>
       <div class="stat-sub">total collected</div>
+    </div>
+    <div class="stat-card stat-info" onclick="switchView('unitsales')" style="cursor:pointer">
+      <div class="stat-icon">🏷️</div><div class="stat-label">Unit Sales (Mo)</div>
+      <div class="stat-value" style="color:var(--info);font-size:18px">₱${UNIT_SALES.filter(s=>s.date&&s.date>=mFrom).reduce((t,s)=>t+(parseFloat(s.totalPrice)||0),0).toLocaleString()}</div>
+      <div class="stat-sub">${UNIT_SALES.filter(s=>s.date&&s.date>=mFrom).length} sold this month</div>
     </div>`:''}
   </div>
 
@@ -1513,6 +1582,55 @@ function renderDashboard() {
         ${session.role==='owner'?`<div class="ref-card" onclick="switchView('reports')"><div class="ref-icon">📊</div><div class="ref-title">Reports</div><div class="ref-sub">Monthly PDF export</div></div>`:''}
       </div>
     </div>
+
+    ${session.role==='owner'&&opexCatSorted.length?`
+    <!-- OPEX Category Breakdown -->
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">💸 OPEX Breakdown (This Month)</div><button class="btn btn-sm btn-outline" onclick="switchView('revenue')">Details</button></div>
+      <div class="panel-body">
+        ${(function(){
+          var catColors=['#ef4444','#f97316','#f59e0b','#a78bfa','#06b6d4','#84cc16','#3b82f6','#10b981'];
+          return opexCatSorted.map(function(x,i){
+            return '<div style="margin-bottom:8px">'
+              +'<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'
+              +'<span style="font-weight:600">'+x[0]+'</span>'
+              +'<span style="color:'+catColors[i%catColors.length]+';font-weight:700">₱'+x[1].toLocaleString()+'</span>'
+              +'</div>'
+              +'<div style="height:7px;background:var(--border);border-radius:4px;overflow:hidden">'
+              +'<div style="height:100%;width:'+Math.round((x[1]/opexCatMax)*100)+'%;background:'+catColors[i%catColors.length]+';border-radius:4px;transition:width .5s"></div>'
+              +'</div></div>';
+          }).join('');
+        })()}
+        <div style="font-size:10.5px;color:var(--text-dim);margin-top:8px;text-align:right">Total: ₱${mthExp.toLocaleString()}</div>
+      </div>
+    </div>`:''}
+
+    ${followUps.length?`
+    <!-- For Follow-up -->
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">🔔 For Follow-up</div><button class="btn btn-sm btn-outline" onclick="switchView('followup')">View all</button></div>
+      <div style="padding:12px">
+        ${(function(){
+          var n=new Date();n.setHours(0,0,0,0);
+          return followUps.map(function(b){
+            var ncd=new Date(b.nextCleaningDate+'T00:00:00');
+            var diff=Math.ceil((ncd-n)/(1000*60*60*24));
+            var tag=diff<0?'<span style="color:var(--danger);font-weight:700;font-size:10.5px">'+Math.abs(diff)+'d overdue</span>'
+                  :diff===0?'<span style="color:var(--warning);font-weight:700;font-size:10.5px">Today</span>'
+                  :'<span style="color:var(--success);font-size:10.5px">in '+diff+'d</span>';
+            return '<div style="display:flex;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="openBookingDetail(\''+b.id+'\')">'
+              +'<div style="flex:1;min-width:0">'
+              +'<div style="font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+b.name+'</div>'
+              +'<div style="font-size:11px;color:var(--text-dim)">🔧 '+(b.service||'—')+'</div>'
+              +'</div>'
+              +'<div style="text-align:right">'
+              +tag
+              +'<div style="font-size:10px;color:var(--text-dim)">'+formatDate(b.nextCleaningDate)+'</div>'
+              +'</div></div>';
+          }).join('');
+        })()}
+      </div>
+    </div>`:''}
   </div>`;
 }
 
@@ -1824,7 +1942,7 @@ function updateBooking(id) {
   saveLocalData();
   syncBookingToSheets(b);
   logActivity('✏️', `Updated booking ${id} — Status: ${status}, Tech: ${tech||b.technician}, Amount: ₱${amount.toLocaleString()}`, 'booking');
-  addNotif(`Booking ${id} updated to ${status}`);
+  addNotif(`Booking ${id} updated to ${status}`, 'info', id);
   closeModal('bookingModal');
   switchView('bookings');
   showToast('Booking updated! Syncing to Sheets...', 'success');
@@ -2030,7 +2148,7 @@ async function saveBooking() {
   };
   saveLocalData();
   logActivity('➕', `New booking: ${name} — ${service}${summary?' ('+summary+')':''}`, 'booking');
-  addNotif(`New booking from ${name}: ${service}`);
+  addNotif(`New booking from ${name}: ${service}`, 'info', id);
   syncBookingToSheets(BOOKINGS[id]);
   closeModal('editModal');
   switchView('bookings');
@@ -3183,20 +3301,121 @@ function downloadReceiptPDF() {
 /* ===========================
    QUOTATION PDF GENERATOR — Exact Form Match
 =========================== */
+var _qtBookingId = '';
+
 function generateQuotationPDF(id) {
+  var b = BOOKINGS[id];
+  if (!b) { showToast('Booking not found','error'); return; }
+  _qtBookingId = id;
+
+  var svc = (b.service||'').toLowerCase();
+  var formType = 'general';
+  if      (svc.includes('split'))                                    formType = 'split';
+  else if (svc.includes('window'))                                   formType = 'window';
+  else if (svc.includes('mounted')||svc.includes('floor'))           formType = 'mounted';
+  else if (svc.includes('front'))                                    formType = 'frontload';
+  else if (svc.includes('top')||svc.includes('awm')||svc.includes('washing')) formType = 'topload';
+  var isAC = ['split','window','mounted'].includes(formType);
+  var isWM = ['frontload','topload'].includes(formType);
+  var det = b.serviceDetailsSummary || b.serviceDetails || b.notes || '';
+  var detParts = det.split(/[·,]/).map(function(s){return s.trim();}).filter(Boolean);
+
+  var unitTypeVal = '';
+  if (isAC) unitTypeVal = formType==='split'?'Split Type':formType==='window'?'Window Type':'Mounted/Floor Standing';
+  else if (isWM) unitTypeVal = formType==='frontload'?'Front Load':'Top Load';
+
+  var qNo = b.refNo ? b.refNo.replace(/^BK-/,'QT-') : 'QT-DJCE-'+b.id.replace(/^BK-DJCE-/,'').replace(/^BK-/,'');
+  var fieldStyle = 'width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-elev);color:var(--text);font-size:13px;font-family:inherit';
+  var labelStyle = 'font-size:11px;font-weight:600;color:var(--text-dim);margin-bottom:3px';
+  var rowStyle = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px';
+
+  document.getElementById('qtSub').textContent = qNo + ' · ' + (b.name||'');
+  document.getElementById('qtBody').innerHTML = `
+    <div style="margin-bottom:14px">
+      <div class="sec-divider" style="margin-bottom:10px">👤 Customer Info</div>
+      <div style="${rowStyle}">
+        <div><div style="${labelStyle}">Client Name</div><input id="qt_name" style="${fieldStyle}" value="${(b.name||'').replace(/"/g,'&quot;')}"></div>
+        <div><div style="${labelStyle}">Contact No.</div><input id="qt_phone" style="${fieldStyle}" value="${(b.phone||'').replace(/"/g,'&quot;')}"></div>
+      </div>
+      <div style="margin-bottom:8px"><div style="${labelStyle}">Address</div><input id="qt_address" style="${fieldStyle}" value="${(b.address||'').replace(/"/g,'&quot;')}"></div>
+      <div style="${rowStyle}">
+        <div><div style="${labelStyle}">Landmark</div><input id="qt_landmark" style="${fieldStyle}" value="${(b.landmark||'').replace(/"/g,'&quot;')}"></div>
+        <div><div style="${labelStyle}">Pin Location (Lat, Lng)</div><input id="qt_pin" style="${fieldStyle}" value="${b.lat&&b.lng?b.lat+', '+b.lng:''}"></div>
+      </div>
+    </div>
+    <div style="margin-bottom:14px">
+      <div class="sec-divider" style="margin-bottom:10px">🔧 Service & Unit Details</div>
+      <div style="margin-bottom:8px"><div style="${labelStyle}">Service</div><input id="qt_service" style="${fieldStyle}" value="${(b.service||'').replace(/"/g,'&quot;')}"></div>
+      <div style="${rowStyle}">
+        <div><div style="${labelStyle}">Unit Type</div><input id="qt_unitType" style="${fieldStyle}" value="${unitTypeVal}"></div>
+        <div><div style="${labelStyle}">Brand</div><input id="qt_brand" style="${fieldStyle}" value="${detParts[1]||''}"></div>
+      </div>
+      <div style="${rowStyle}">
+        <div><div style="${labelStyle}">${isWM?'Capacity (kg)':'HP (Horsepower)'}</div><input id="qt_hp" style="${fieldStyle}" value="${detParts[0]||''}"></div>
+        <div><div style="${labelStyle}">Model</div><input id="qt_model" style="${fieldStyle}" value=""></div>
+      </div>
+      <div style="${rowStyle}">
+        <div><div style="${labelStyle}">Last Cleaning</div><input id="qt_lastClean" style="${fieldStyle}" value=""></div>
+        <div><div style="${labelStyle}">Quantity</div><input id="qt_qty" style="${fieldStyle}" value=""></div>
+      </div>
+      <div style="margin-bottom:8px"><div style="${labelStyle}">Sira / Reklamo ng Unit</div><input id="qt_issue" style="${fieldStyle}" value="${(!isAC&&!isWM?det:'').replace(/"/g,'&quot;')}"></div>
+      <div style="margin-bottom:8px"><div style="${labelStyle}">Location ng Unit</div><input id="qt_location" style="${fieldStyle}" value=""></div>
+    </div>
+    <div style="margin-bottom:14px">
+      <div class="sec-divider" style="margin-bottom:10px">💰 Service Fee Breakdown</div>
+      <div style="${rowStyle}">
+        <div><div style="${labelStyle}">Deepclean</div><input id="qt_feeService" type="number" style="${fieldStyle}" value="${b.feeService||''}"></div>
+        <div><div style="${labelStyle}">Repair</div><input id="qt_feeParts" type="number" style="${fieldStyle}" value="${b.feeParts||''}"></div>
+      </div>
+      <div style="${rowStyle}">
+        <div><div style="${labelStyle}">Spare Parts & SF</div><input id="qt_feeTranspo" type="number" style="${fieldStyle}" value="${b.feeTranspo||''}"></div>
+        <div><div style="${labelStyle}">Other</div><input id="qt_feeOther" type="number" style="${fieldStyle}" value="${b.feeOther||''}"></div>
+      </div>
+      <div style="${rowStyle}">
+        <div><div style="${labelStyle}">Total Amount</div><input id="qt_amount" type="number" style="${fieldStyle}" value="${b.amount||''}"></div>
+        <div><div style="${labelStyle}">Discount</div><input id="qt_discount" type="number" style="${fieldStyle}" value="${b.feeDiscount||''}"></div>
+      </div>
+    </div>`;
+  openModal('quotationModal');
+}
+
+function downloadQuotationFromModal() {
+  var id = _qtBookingId;
   var b = BOOKINGS[id];
   if (!b) { showToast('Booking not found','error'); return; }
   if (!window.jspdf) {
     showToast('Loading PDF library...','info');
-    loadJsPdf().then(function(){generateQuotationPDF(id);}).catch(function(){showToast('Failed','error');});
+    loadJsPdf().then(function(){downloadQuotationFromModal();}).catch(function(){showToast('Failed','error');});
     return;
   }
 
+  // Read edited values from modal
+  var qData = {
+    name: document.getElementById('qt_name')?.value || b.name || '',
+    phone: document.getElementById('qt_phone')?.value || b.phone || '',
+    address: document.getElementById('qt_address')?.value || b.address || '',
+    landmark: document.getElementById('qt_landmark')?.value || b.landmark || '',
+    pin: document.getElementById('qt_pin')?.value || '',
+    service: document.getElementById('qt_service')?.value || b.service || '',
+    unitType: document.getElementById('qt_unitType')?.value || '',
+    brand: document.getElementById('qt_brand')?.value || '',
+    hp: document.getElementById('qt_hp')?.value || '',
+    model: document.getElementById('qt_model')?.value || '',
+    lastClean: document.getElementById('qt_lastClean')?.value || '',
+    qty: document.getElementById('qt_qty')?.value || '',
+    issue: document.getElementById('qt_issue')?.value || '',
+    location: document.getElementById('qt_location')?.value || '',
+    feeService: document.getElementById('qt_feeService')?.value || '',
+    feeParts: document.getElementById('qt_feeParts')?.value || '',
+    feeTranspo: document.getElementById('qt_feeTranspo')?.value || '',
+    feeOther: document.getElementById('qt_feeOther')?.value || '',
+    amount: document.getElementById('qt_amount')?.value || b.amount || '',
+    discount: document.getElementById('qt_discount')?.value || ''
+  };
+
   var doc = new window.jspdf.jsPDF({ unit:'mm', format:'a4' });
   var W=210, H=297, pl=10, pr=200, cw=W-20;
-  var svc = (b.service||'').toLowerCase();
-  var det = b.serviceDetailsSummary || b.serviceDetails || b.notes || '';
-  var detParts = det.split(/[·,]/).map(function(s){return s.trim();}).filter(Boolean);
+  var svc = (qData.service||'').toLowerCase();
 
   var formType = 'general';
   if      (svc.includes('split'))                                    formType = 'split';
@@ -3207,8 +3426,7 @@ function generateQuotationPDF(id) {
 
   var isAC = ['split','window','mounted'].includes(formType);
   var isWM = ['frontload','topload'].includes(formType);
-  var svcCode = getServiceCode(b.service||'');
-  // Use existing refNo if booking has one, or generate QT ref from booking ID
+  var svcCode = getServiceCode(qData.service||'');
   var qNo = b.refNo ? b.refNo.replace(/^BK-/,'QT-') : 'QT-DJCE-'+b.id.replace(/^BK-DJCE-/,'').replace(/^BK-/,'');
   var qDate = new Date().toLocaleDateString('en-PH',{year:'numeric',month:'long',day:'numeric'});
 
@@ -3263,9 +3481,9 @@ function generateQuotationPDF(id) {
   var qFields = [
     ['Quotation No.', qNo],
     ['Date',          qDate],
-    ['Prepared For',  b.name||''],
-    ['Contact No.',   b.phone||''],
-    ['Address',       b.address||'']
+    ['Prepared For',  qData.name],
+    ['Contact No.',   qData.phone],
+    ['Address',       qData.address]
   ];
   fs(8); draw(180,190,210,0.2);
   qFields.forEach(function(r){
@@ -3283,7 +3501,7 @@ function generateQuotationPDF(id) {
   fill(...NAVY); rect(pl, y, cw, 8);
   fc(...GOLD); fs(8); fn('bold'); txt('SERVICE AVAILING:', pl+2, y+5.5);
   fc(...WHITE); fn('normal');
-  txt('  '+(b.service||''), pl+34, y+5.5);
+  txt('  '+(qData.service), pl+34, y+5.5);
   y += 11;
 
   // ── IMPORMASYON NG CUSTOMER (full width) ──
@@ -3296,11 +3514,11 @@ function generateQuotationPDF(id) {
   draw(...NAVY, 0.3);
   rect(pl, y, cw, 35, 'S'); // outer border
   var custFields = [
-    ['Pangalan',                b.name||''],
-    ['Contact Number',          b.phone||''],
-    ['Buong Address',           b.address||''],
-    ['Landmark',                b.landmark||''],
-    ['Pin Location / Google Map',(b.lat&&b.lng)?b.lat+', '+b.lng:'']
+    ['Pangalan',                qData.name],
+    ['Contact Number',          qData.phone],
+    ['Buong Address',           qData.address],
+    ['Landmark',                qData.landmark],
+    ['Pin Location / Google Map',qData.pin]
   ];
   var cy = y;
   var rowH = 7;
@@ -3336,36 +3554,36 @@ function generateQuotationPDF(id) {
   var unitFields = [];
   if (isAC) {
     unitFields = [
-      ['Uri ng Unit',            formType==='split'?'Split Type':formType==='window'?'Window Type':'Mounted/Floor Standing'],
-      ['Brand',                  detParts[1]||''],
-      ['Model',                  ''],
-      ['HP (Horsepower)',         detParts[0]||''],
-      ['Huling Linis (Last Cleaning)', ''],
-      ['Sira / Reklamo ng Unit', ''],
-      ['Quantity',               ''],
-      ['Location ng Unit',       '']
+      ['Uri ng Unit',            qData.unitType],
+      ['Brand',                  qData.brand],
+      ['Model',                  qData.model],
+      ['HP (Horsepower)',        qData.hp],
+      ['Huling Linis (Last Cleaning)', qData.lastClean],
+      ['Sira / Reklamo ng Unit', qData.issue],
+      ['Quantity',               qData.qty],
+      ['Location ng Unit',       qData.location]
     ];
   } else if (isWM) {
     unitFields = [
-      ['Uri ng Unit',            formType==='frontload'?'Front Load':'Top Load'],
-      ['Capacity (kg)',          detParts[0]||''],
-      ['Brand',                  detParts[1]||''],
-      ['Model',                  ''],
-      ['Huling Linis (Last Cleaning)', ''],
-      ['Sira / Reklamo ng Unit', ''],
-      ['Quantity',               ''],
-      ['',                       ''] // spacer to match height
+      ['Uri ng Unit',            qData.unitType],
+      ['Capacity (kg)',          qData.hp],
+      ['Brand',                  qData.brand],
+      ['Model',                  qData.model],
+      ['Huling Linis (Last Cleaning)', qData.lastClean],
+      ['Sira / Reklamo ng Unit', qData.issue],
+      ['Quantity',               qData.qty],
+      ['',                       '']
     ];
   } else {
     unitFields = [
-      ['Uri ng Unit',  ''],
-      ['Brand',        ''],
-      ['Model',        ''],
-      ['HP (Horsepower)', ''],
-      ['Huling Linis (Last Cleaning)', ''],
-      ['Sira / Reklamo ng Unit', det||''],
-      ['Quantity',     ''],
-      ['Location ng Unit', '']
+      ['Uri ng Unit',  qData.unitType],
+      ['Brand',        qData.brand],
+      ['Model',        qData.model],
+      ['HP (Horsepower)', qData.hp],
+      ['Huling Linis (Last Cleaning)', qData.lastClean],
+      ['Sira / Reklamo ng Unit', qData.issue],
+      ['Quantity',     qData.qty],
+      ['Location ng Unit', qData.location]
     ];
   }
 
@@ -3386,7 +3604,9 @@ function generateQuotationPDF(id) {
   // Right: Service Fee rows
   var sfY = y;
   var sfItems = [
-    ['Deepclean',''],['Repair',''],['Spare Parts & SF','']
+    ['Deepclean', qData.feeService ? parseFloat(qData.feeService).toLocaleString() : ''],
+    ['Repair', qData.feeParts ? parseFloat(qData.feeParts).toLocaleString() : ''],
+    ['Spare Parts & SF', qData.feeTranspo ? parseFloat(qData.feeTranspo).toLocaleString() : '']
   ];
   draw(...NAVY,0.3); rect(colR, sfY, colRW, sfItems.length*uRowH, 'S');
   sfItems.forEach(function(f,i){
@@ -3395,6 +3615,7 @@ function generateQuotationPDF(id) {
     fn('normal'); fc(...NAVY); fs(8); txt(f[0], colR+3, ry+4.5);
     fc(...GRAY); txt('-', colR+42, ry+4.5);
     fn('bold'); fc(...NAVY); txt('P', colR+48, ry+4.5);
+    if(f[1]){ fn('normal'); fc(...GRAY); txt(f[1], colR+52, ry+4.5); }
     draw(180,185,210,0.3); line(colR+52, ry+uRowH-1.5, colR+colRW, ry+uRowH-1.5);
   });
 
@@ -3405,21 +3626,26 @@ function generateQuotationPDF(id) {
   fn('bold'); fc(...NAVY); fs(8);
   txt('TOTAL AMOUNT', colR+3, sfBotY+5);
   txt('P', colR+48, sfBotY+5);
+  if(qData.amount){ fn('normal'); txt(parseFloat(qData.amount).toLocaleString(), colR+52, sfBotY+5); }
   draw(180,185,210,0.3); line(colR+52, sfBotY+5.5, colR+colRW, sfBotY+5.5);
 
   // TOTAL AMOUNT row
   var taY = sfBotY+9;
+  var totalAmt = qData.amount ? parseFloat(qData.amount).toLocaleString() : '';
   fn('bold'); fc(...NAVY); fs(8.5);
   txt('TOTAL AMOUNT:', colR+3, taY+4.5);
   txt('P', colR+48, taY+4.5);
+  if(totalAmt){ fn('normal'); txt(totalAmt, colR+52, taY+4.5); }
   draw(...NAVY,0.4); line(colR+52, taY+5, colR+colRW, taY+5);
   taY += 8;
 
   // LESS DISCOUNT row
+  var discAmt = qData.discount ? parseFloat(qData.discount).toLocaleString() : '';
   fn('bold'); fc(...RED); fs(8.5);
   txt('LESS DISCOUNT:', colR+3, taY+4.5);
   fc(...GRAY); fn('normal'); txt('-', colR+42, taY+4.5);
   fn('bold'); fc(...NAVY); txt('P', colR+48, taY+4.5);
+  if(discAmt){ fn('normal'); fc(...RED); txt(discAmt, colR+52, taY+4.5); }
   draw(180,185,210,0.3); line(colR+52, taY+5, colR+colRW, taY+5);
   taY += 8;
 
@@ -3429,7 +3655,8 @@ function generateQuotationPDF(id) {
   txt('AMOUNT DUE:', colR+3, taY+6);
   // P + underline (gold)
   fc(255,220,100); txt('P', colR+48, taY+6);
-  if(b.amount){ txt(parseFloat(b.amount).toLocaleString(), colR+colRW-2, taY+6, {align:'right'}); }
+  var amtDue = (parseFloat(qData.amount)||0) - (parseFloat(qData.discount)||0);
+  if(qData.amount){ txt(amtDue.toLocaleString(), colR+colRW-2, taY+6, {align:'right'}); }
   draw(255,220,100,0.4); line(colR+52, taY+7, colR+colRW-2, taY+7);
 
   // Advance y past the taller of left/right columns
@@ -3513,8 +3740,9 @@ function generateQuotationPDF(id) {
   txt(DJCE_BIZ.name+' · '+DJCE_BIZ.phone+' · '+DJCE_BIZ.address, W/2, H-4, {align:'center'});
 
   doc.save('DJCE-Quotation-'+qNo+'.pdf');
+  closeModal('quotationModal');
   showToast('Quotation PDF generated! 📋','success');
-  logActivity('📋','Generated quotation for '+b.id+' — '+b.name+' ('+formType+')','document');
+  logActivity('📋','Generated quotation for '+b.id+' — '+qData.name+' ('+formType+')','document');
 }
 
 /* ===========================
@@ -4240,15 +4468,32 @@ function renderRevenueChart() {
   for (let i=5; i>=0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
     const label = d.toLocaleString('default',{month:'short'});
+    const ym = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
     const rev = bks.filter(b=>{
       const bd = new Date(b.date||'');
       return bd.getMonth()===d.getMonth() && bd.getFullYear()===d.getFullYear();
     }).reduce((s,b)=>s+(parseFloat(b.amount)||0),0);
-    months.push({label,rev});
+    const opx = EXPENSES.filter(e=>e.date&&e.date.startsWith(ym)).reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+    months.push({label,rev,opx});
   }
-  const max = Math.max(...months.map(m=>m.rev),1);
-  return '<div class="chart-wrap"><div class="chart-title">Monthly Revenue (₱)</div>'
-    +'<div class="bar-chart">'+months.map(function(m,i){return '<div class="bar-item"><div class="bar-val" style="font-size:9px;color:var(--accent)">₱'+m.rev.toLocaleString()+'</div><div class="bar-fill" style="height:'+(m.rev/max)*100+'%;background:'+(i===5?'#f59e0b':'#1a3566')+';opacity:'+(i===5?1:0.7)+'"></div><div class="bar-label">'+m.label+'</div></div>';}).join('')+'</div></div>';
+  const max = Math.max(...months.map(m=>Math.max(m.rev,m.opx)),1);
+  return '<div class="chart-wrap"><div class="chart-title">Revenue vs OPEX (₱)</div>'
+    +'<div style="display:flex;gap:6px;justify-content:center;margin-bottom:8px;font-size:10px;font-weight:600"><span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#10b981;display:inline-block"></span>Revenue</span><span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#ef4444;display:inline-block"></span>OPEX</span></div>'
+    +'<div class="bar-chart">'+months.map(function(m,i){
+      var isCurrent = i===5;
+      return '<div class="bar-item" style="display:flex;flex-direction:column;align-items:center;flex:1">'
+        +'<div style="display:flex;gap:2px;align-items:flex-end;height:100%;width:100%;justify-content:center">'
+        +'<div style="display:flex;flex-direction:column;align-items:center;flex:1;max-width:22px">'
+        +'<div style="font-size:8px;color:#10b981;font-weight:700;white-space:nowrap">₱'+m.rev.toLocaleString()+'</div>'
+        +'<div style="width:100%;height:'+Math.max((m.rev/max)*80,2)+'px;background:#10b981;border-radius:3px 3px 0 0;opacity:'+(isCurrent?1:0.7)+'"></div>'
+        +'</div>'
+        +'<div style="display:flex;flex-direction:column;align-items:center;flex:1;max-width:22px">'
+        +'<div style="font-size:8px;color:#ef4444;font-weight:700;white-space:nowrap">₱'+m.opx.toLocaleString()+'</div>'
+        +'<div style="width:100%;height:'+Math.max((m.opx/max)*80,2)+'px;background:#ef4444;border-radius:3px 3px 0 0;opacity:'+(isCurrent?1:0.7)+'"></div>'
+        +'</div>'
+        +'</div>'
+        +'<div class="bar-label">'+m.label+'</div></div>';
+    }).join('')+'</div></div>';
 }
 
 function renderReports() {
@@ -4315,8 +4560,20 @@ function buildReportsContent(ym) {
     wStart.setDate(wStart.getDate()+7);
   }
 
+  // Source/channel breakdown
+  const srcMap = {};
+  mBks.forEach(b=>{ const s=(b.source||'Unknown').trim(); srcMap[s]=(srcMap[s]||0)+1; });
+  const srcSorted = Object.entries(srcMap).sort((a,b)=>b[1]-a[1]);
+
+  // OPEX by category (reports)
+  const rptOpexByCat = {};
+  mExp.forEach(e=>{ const c=e.category||'Other'; rptOpexByCat[c]=(rptOpexByCat[c]||0)+(parseFloat(e.amount)||0); });
+  const rptOpexCatSorted = Object.entries(rptOpexByCat).sort((a,b)=>b[1]-a[1]);
+
   // Bar chart helpers
   const maxSvc = Math.max(...svcSorted.map(s=>s[1]),1);
+  const maxSrc = Math.max(...srcSorted.map(s=>s[1]),1);
+  const rptOpexCatMax = Math.max(...rptOpexCatSorted.map(x=>x[1]),1);
   const svcColors = ['#f59e0b','#3b82f6','#10b981','#a78bfa','#ef4444','#06b6d4','#f97316','#84cc16'];
 
   const opexDetailHtml = mExp.length ? (function(){
@@ -4347,6 +4604,36 @@ function buildReportsContent(ym) {
         +'</div>'
         +'<div style="height:7px;background:var(--border);border-radius:4px;overflow:hidden">'
         +'<div style="height:100%;width:'+Math.round((c/maxSvc)*100)+'%;background:'+svcColors[i%svcColors.length]+';border-radius:4px;transition:width .5s"></div>'
+        +'</div></div>';
+    }).join('');
+  })();
+
+  const srcBreakdownHtml = (function(){
+    if (!srcSorted.length) return '<div class="empty" style="padding:10px">No bookings this month</div>';
+    var srcColors=['#3b82f6','#10b981','#f59e0b','#a78bfa','#ef4444','#06b6d4','#f97316','#84cc16'];
+    return srcSorted.map(function([s,c],i){
+      return '<div style="margin-bottom:8px">'
+        +'<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'
+        +'<span style="font-weight:600">'+s+'</span>'
+        +'<span style="color:'+srcColors[i%srcColors.length]+';font-weight:700">'+c+' booking'+(c!==1?'s':'')+'</span>'
+        +'</div>'
+        +'<div style="height:7px;background:var(--border);border-radius:4px;overflow:hidden">'
+        +'<div style="height:100%;width:'+Math.round((c/maxSrc)*100)+'%;background:'+srcColors[i%srcColors.length]+';border-radius:4px;transition:width .5s"></div>'
+        +'</div></div>';
+    }).join('');
+  })();
+
+  const rptOpexCatHtml = (function(){
+    if (!rptOpexCatSorted.length) return '<div class="empty" style="padding:10px">No expenses this month</div>';
+    var catColors=['#ef4444','#f97316','#f59e0b','#a78bfa','#06b6d4','#84cc16','#3b82f6','#10b981'];
+    return rptOpexCatSorted.map(function([cat,amt],i){
+      return '<div style="margin-bottom:8px">'
+        +'<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'
+        +'<span style="font-weight:600">'+cat+'</span>'
+        +'<span style="color:'+catColors[i%catColors.length]+';font-weight:700">₱'+amt.toLocaleString()+'</span>'
+        +'</div>'
+        +'<div style="height:7px;background:var(--border);border-radius:4px;overflow:hidden">'
+        +'<div style="height:100%;width:'+Math.round((amt/rptOpexCatMax)*100)+'%;background:'+catColors[i%catColors.length]+';border-radius:4px;transition:width .5s"></div>'
         +'</div></div>';
     }).join('');
   })();
@@ -4408,6 +4695,23 @@ function buildReportsContent(ym) {
       <div class="panel-head"><div class="panel-title">👷 Technician Performance</div></div>
       <div class="panel-body">
         ${techTableHtml}
+      </div>
+    </div>
+
+    <!-- Source/Channel Breakdown -->
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">📣 Booking Sources</div></div>
+      <div class="panel-body">
+        ${srcBreakdownHtml}
+      </div>
+    </div>
+
+    <!-- OPEX Category Breakdown -->
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">💸 OPEX by Category</div></div>
+      <div class="panel-body">
+        ${rptOpexCatHtml}
+        <div style="font-size:10.5px;color:var(--text-dim);margin-top:8px;text-align:right">Total OPEX: ₱${opex.toLocaleString()}</div>
       </div>
     </div>
   </div>
@@ -4742,6 +5046,716 @@ function _generateMonthlyReportPDFInner() {
 }
 
 /* ===========================
+   ACCOUNTING MODULE (Batch 3)
+=========================== */
+
+// --- localStorage persistence for accounting data ---
+function loadAcctData() {
+  try {
+    ACCT_EMPLOYEES = JSON.parse(localStorage.getItem('djce_employees')||'[]');
+    ACCT_DAILY_LOG = JSON.parse(localStorage.getItem('djce_daily_log')||'[]');
+    ACCT_PAYROLL   = JSON.parse(localStorage.getItem('djce_payroll')||'[]');
+    ACCT_INVESTORS = JSON.parse(localStorage.getItem('djce_investors')||'[]');
+    ACCT_13TH_MONTH= JSON.parse(localStorage.getItem('djce_13th_month')||'[]');
+    UNIT_PRODUCTS  = JSON.parse(localStorage.getItem('djce_unit_products')||'[]');
+    UNIT_SALES     = JSON.parse(localStorage.getItem('djce_unit_sales')||'[]');
+  } catch(e) { console.warn('loadAcctData err', e); }
+}
+function saveAcctData() {
+  try {
+    localStorage.setItem('djce_employees', JSON.stringify(ACCT_EMPLOYEES));
+    localStorage.setItem('djce_daily_log', JSON.stringify(ACCT_DAILY_LOG));
+    localStorage.setItem('djce_payroll',   JSON.stringify(ACCT_PAYROLL));
+    localStorage.setItem('djce_investors', JSON.stringify(ACCT_INVESTORS));
+    localStorage.setItem('djce_13th_month',JSON.stringify(ACCT_13TH_MONTH));
+    localStorage.setItem('djce_unit_products',JSON.stringify(UNIT_PRODUCTS));
+    localStorage.setItem('djce_unit_sales',JSON.stringify(UNIT_SALES));
+  } catch(e) { console.warn('saveAcctData err', e); }
+}
+
+function switchAcctTab(tab) { _acctTab = tab; switchView('accounting'); }
+
+function renderAccounting() {
+  loadAcctData();
+  var tabs = [
+    {id:'employees', icon:'👥', label:'Employees'},
+    {id:'daily',     icon:'📋', label:'Daily Tracker'},
+    {id:'payroll',   icon:'💵', label:'Payroll'},
+    {id:'13th',      icon:'🎁', label:'13th Month'},
+    {id:'investors', icon:'📊', label:'Investor Shares'}
+  ];
+  var tabBar = '<div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;overflow-x:auto;padding-bottom:4px">'
+    +tabs.map(function(t){
+      var act=_acctTab===t.id;
+      return '<button class="btn btn-sm '+(act?'btn-gold':'btn-outline')+'" onclick="switchAcctTab(\''+t.id+'\')">'+t.icon+' '+t.label+'</button>';
+    }).join('')+'</div>';
+  var body = '';
+  switch(_acctTab) {
+    case 'employees': body = renderAcctEmployees(); break;
+    case 'daily':     body = renderAcctDaily(); break;
+    case 'payroll':   body = renderAcctPayroll(); break;
+    case '13th':      body = renderAcct13th(); break;
+    case 'investors': body = renderAcctInvestors(); break;
+    default: body = renderAcctEmployees();
+  }
+  return '<div style="margin-bottom:10px;font-size:12px;color:var(--text-dim)">🧮 Accounting & Payroll · <strong>Owner + Head Tech Access Only</strong></div>' + tabBar + body;
+}
+
+// ─── EMPLOYEES SUB-TAB ────────────────────────────
+function renderAcctEmployees() {
+  var empHtml = '';
+  if (!ACCT_EMPLOYEES.length) {
+    empHtml = '<div class="empty" style="padding:24px"><div class="empty-ic">👥</div>No employees yet. Add your first team member.</div>';
+  } else {
+    var typeColors = {fixed:'var(--info)',commission:'var(--accent)',oncall:'var(--warning)',investor:'var(--success)'};
+    empHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px">'
+      +ACCT_EMPLOYEES.map(function(e){
+        return '<div style="background:var(--bg-elev2);border:1px solid var(--border);border-radius:10px;padding:14px">'
+          +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
+          +'<div><div style="font-weight:700;font-size:14px">'+e.name+'</div>'
+          +'<div style="font-size:11.5px;color:var(--text-dim);margin-top:2px">'+e.role+'</div></div>'
+          +'<span class="bc-tag" style="background:color-mix(in srgb,'+(typeColors[e.type]||'var(--text-dim)')+' 15%,transparent);color:'+(typeColors[e.type]||'var(--text-dim)')+'">'+e.type+'</span>'
+          +'</div>'
+          +'<div style="margin-top:10px;font-size:12px;display:flex;gap:12px;color:var(--text-dim)">'
+          +'<span>💰 ₱'+(parseFloat(e.dailyRate)||0).toLocaleString()+'/day</span>'
+          +(e.notes?'<span>📝 '+e.notes+'</span>':'')
+          +'</div>'
+          +'<div style="margin-top:10px;display:flex;gap:6px">'
+          +'<button class="btn btn-outline btn-xs" onclick="openEditEmployee(\''+e.id+'\')">✏️ Edit</button>'
+          +'<button class="btn btn-outline btn-xs" style="color:var(--danger)" onclick="deleteEmployee(\''+e.id+'\')">🗑️</button>'
+          +'</div></div>';
+      }).join('')+'</div>';
+  }
+  return '<div class="panel"><div class="panel-head"><div class="panel-title">👥 Employee List</div>'
+    +'<button class="btn btn-gold btn-sm" onclick="openEditEmployee()">➕ Add Employee</button></div>'
+    +'<div class="panel-body">'+empHtml+'</div></div>';
+}
+
+function openEditEmployee(editId) {
+  var e = editId ? ACCT_EMPLOYEES.find(function(x){return x.id===editId;}) : null;
+  var html = '<div class="form-grid">'
+    +'<div class="field"><label>Name *</label><input id="emp_name" value="'+(e?e.name:'')+'" placeholder="e.g. Juan dela Cruz"></div>'
+    +'<div class="field"><label>Role *</label><input id="emp_role" value="'+(e?e.role:'')+'" placeholder="e.g. Head Tech, Helper, Admin"></div>'
+    +'<div class="field"><label>Type *</label><select id="emp_type">'
+    +['fixed','commission','oncall','investor'].map(function(t){return '<option value="'+t+'" '+(e&&e.type===t?'selected':'')+'>'+t+'</option>';}).join('')
+    +'</select></div>'
+    +'<div class="field"><label>Daily Rate (₱)</label><input type="number" id="emp_rate" value="'+(e?e.dailyRate||'':'')+'" placeholder="0" min="0"></div>'
+    +'<div class="field form-full"><label>Notes</label><input id="emp_notes" value="'+(e?e.notes||'':'')+'" placeholder="e.g. Saturdays only, family"></div>'
+    +'</div>';
+  document.getElementById('expModalTitle').textContent = e ? 'Edit Employee' : 'Add Employee';
+  document.getElementById('expModalBody').innerHTML = html;
+  document.getElementById('expModalFoot').innerHTML =
+    '<button class="btn btn-outline btn-sm" onclick="closeModal(\'expenseModal\')">Cancel</button>'
+    +'<button class="btn btn-gold btn-sm" onclick="saveEmployee('+(editId?"'"+editId+"'":'null')+')">💾 Save</button>';
+  openModal('expenseModal');
+}
+
+function saveEmployee(editId) {
+  var name = (document.getElementById('emp_name').value||'').trim();
+  var role = (document.getElementById('emp_role').value||'').trim();
+  if (!name||!role) { showToast('Name and Role are required','warning'); return; }
+  var data = {
+    name: name,
+    role: role,
+    type: document.getElementById('emp_type').value,
+    dailyRate: parseFloat(document.getElementById('emp_rate').value)||0,
+    notes: (document.getElementById('emp_notes').value||'').trim()
+  };
+  if (editId) {
+    var idx = ACCT_EMPLOYEES.findIndex(function(x){return x.id===editId;});
+    if (idx>=0) Object.assign(ACCT_EMPLOYEES[idx], data);
+  } else {
+    data.id = 'EMP-'+Date.now();
+    ACCT_EMPLOYEES.push(data);
+  }
+  saveAcctData();
+  closeModal('expenseModal');
+  switchView('accounting');
+  showToast(editId?'Employee updated':'Employee added','success');
+  logActivity('👥', (editId?'Updated':'Added')+' employee: '+name, 'accounting');
+}
+
+function deleteEmployee(id) {
+  if (!confirm('Delete this employee?')) return;
+  ACCT_EMPLOYEES = ACCT_EMPLOYEES.filter(function(x){return x.id!==id;});
+  saveAcctData();
+  switchView('accounting');
+  showToast('Employee removed','info');
+}
+
+// ─── DAILY TRACKER SUB-TAB ────────────────────────
+function renderAcctDaily() {
+  var today = new Date().toISOString().split('T')[0];
+  var selDate = document.getElementById('acctDailyDate') ? document.getElementById('acctDailyDate').value : today;
+  if (!selDate) selDate = today;
+
+  // Get jobs done on selected date
+  var dayJobs = Object.values(BOOKINGS).filter(function(b){
+    return b.date===selDate && (b.status==='Done'||b.status==='Ongoing'||b.status==='Confirmed');
+  });
+
+  // Get existing daily log entries for this date
+  var dayLogs = ACCT_DAILY_LOG.filter(function(l){return l.date===selDate;});
+
+  // Build auto-attendance from jobs
+  var techAttendance = {};
+  dayJobs.forEach(function(b){
+    if (b.technician) {
+      if (!techAttendance[b.technician]) techAttendance[b.technician] = {jobs:0, bookingIds:[]};
+      techAttendance[b.technician].jobs++;
+      techAttendance[b.technician].bookingIds.push(b.id);
+    }
+  });
+
+  var empRows = ACCT_EMPLOYEES.map(function(emp){
+    var auto = techAttendance[emp.name] || {jobs:0, bookingIds:[]};
+    var existing = dayLogs.find(function(l){return l.employeeId===emp.id;});
+    var cls = existing ? existing.classification : (auto.jobs>0?'full':'');
+    var clsOptions = ['','half','full','ot'].map(function(c){
+      return '<option value="'+c+'" '+(cls===c?'selected':'')+'>'+(c||'— None —')+'</option>';
+    }).join('');
+    return '<tr>'
+      +'<td><strong>'+emp.name+'</strong><div style="font-size:10.5px;color:var(--text-dim)">'+emp.role+' · ₱'+(parseFloat(emp.dailyRate)||0).toLocaleString()+'/day</div></td>'
+      +'<td style="text-align:center;font-weight:700;color:var(--accent)">'+auto.jobs+'</td>'
+      +'<td><select data-emp-id="'+emp.id+'" class="acct-cls-sel" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px">'+clsOptions+'</select></td>'
+      +'<td><input data-emp-id-note="'+emp.id+'" class="acct-cls-note" value="'+(existing?existing.notes||'':'')+'" placeholder="Audit notes..." style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;width:100%"></td>'
+      +'<td style="text-align:center">'+(existing?'<span style="color:var(--success);font-size:11px">✅ Saved</span>':'<span style="color:var(--text-dim);font-size:11px">—</span>')+'</td>'
+      +'</tr>';
+  }).join('');
+
+  return '<div class="panel" style="margin-bottom:16px"><div class="panel-head">'
+    +'<div class="panel-title">📋 Daily Tracker & Attendance Audit</div>'
+    +'<div style="display:flex;gap:8px;align-items:center">'
+    +'<input type="date" id="acctDailyDate" value="'+selDate+'" onchange="switchAcctTab(\'daily\')" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:12px">'
+    +'</div></div>'
+    +'<div class="panel-body">'
+    +'<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">Jobs from bookings are auto-detected. Head Tech audits classification (Half Day / Full Day / OT) before saving.</div>'
+    +(ACCT_EMPLOYEES.length ?
+      '<div class="tbl-wrap"><table><thead><tr><th>Employee</th><th style="text-align:center">Jobs Done</th><th>Classification</th><th>Audit Notes</th><th style="text-align:center">Status</th></tr></thead>'
+      +'<tbody>'+empRows+'</tbody></table></div>'
+      +'<div style="margin-top:12px;text-align:right">'
+      +'<button class="btn btn-gold btn-sm" onclick="saveDailyAudit(\''+selDate+'\')">💾 Save Audit for '+formatDate(selDate)+'</button>'
+      +'</div>'
+    : '<div class="empty" style="padding:16px"><div class="empty-ic">👥</div>Add employees first in the Employees tab</div>')
+    +'</div></div>'
+    +'<div class="panel"><div class="panel-head"><div class="panel-title">📊 Daily Summary — '+formatDate(selDate)+'</div></div>'
+    +'<div class="panel-body">'
+    +'<div style="font-size:13px">🔧 <strong>'+dayJobs.length+'</strong> job'+(dayJobs.length!==1?'s':'')+' on this date · '
+    +'<strong>'+Object.keys(techAttendance).length+'</strong> technician'+(Object.keys(techAttendance).length!==1?'s':'')+' detected'
+    +'</div>'
+    +(dayJobs.length ? '<div style="margin-top:10px">'+dayJobs.map(function(b){
+      return '<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">'
+        +'<span style="font-weight:700;min-width:80px;color:var(--accent)">'+b.id+'</span>'
+        +'<span style="flex:1">'+b.name+' — '+b.service+'</span>'
+        +'<span>👷 '+(b.technician||'Unassigned')+'</span>'
+        +'<span class="status-badge s-'+(b.status||'pending').toLowerCase().replace(/ /g,'-')+'" style="font-size:10px">'+b.status+'</span>'
+        +'</div>';
+    }).join('')+'</div>' : '')
+    +'</div></div>';
+}
+
+function saveDailyAudit(dateStr) {
+  var selectors = document.querySelectorAll('.acct-cls-sel');
+  var saved = 0;
+  selectors.forEach(function(sel){
+    var empId = sel.getAttribute('data-emp-id');
+    var cls = sel.value;
+    var noteEl = document.querySelector('[data-emp-id-note="'+empId+'"]');
+    var notes = noteEl ? noteEl.value.trim() : '';
+    if (!cls) {
+      // Remove existing entry if classification cleared
+      ACCT_DAILY_LOG = ACCT_DAILY_LOG.filter(function(l){return !(l.date===dateStr&&l.employeeId===empId);});
+      return;
+    }
+    var existing = ACCT_DAILY_LOG.find(function(l){return l.date===dateStr&&l.employeeId===empId;});
+    if (existing) {
+      existing.classification = cls;
+      existing.notes = notes;
+      existing.auditedBy = session.name;
+    } else {
+      ACCT_DAILY_LOG.push({
+        id: 'DL-'+Date.now()+'-'+Math.random().toString(36).substr(2,4),
+        date: dateStr,
+        employeeId: empId,
+        classification: cls,
+        auditedBy: session.name,
+        notes: notes
+      });
+    }
+    saved++;
+  });
+  saveAcctData();
+  switchAcctTab('daily');
+  showToast('Audit saved for '+formatDate(dateStr)+' ('+saved+' entries)','success');
+  logActivity('📋','Daily audit saved for '+dateStr,'accounting');
+}
+
+// ─── PAYROLL SUB-TAB ──────────────────────────────
+function renderAcctPayroll() {
+  // Get current pay period (1-15 or 16-end)
+  var now = new Date();
+  var yr = now.getFullYear(), mo = now.getMonth()+1;
+  var day = now.getDate();
+  var periodLabel = day <= 15 ? '1st-15th' : '16th-'+new Date(yr,mo,0).getDate()+'th';
+  var moLabel = now.toLocaleString('default',{month:'long',year:'numeric'});
+  var pFrom = yr+'-'+String(mo).padStart(2,'0')+'-'+(day<=15?'01':'16');
+  var lastDay = new Date(yr,mo,0).getDate();
+  var pTo = yr+'-'+String(mo).padStart(2,'0')+'-'+(day<=15?'15':String(lastDay));
+
+  // Compute payroll from daily log
+  var payRows = ACCT_EMPLOYEES.map(function(emp){
+    var logs = ACCT_DAILY_LOG.filter(function(l){
+      return l.employeeId===emp.id && l.date>=pFrom && l.date<=pTo && l.classification;
+    });
+    var halfDays = logs.filter(function(l){return l.classification==='half';}).length;
+    var fullDays = logs.filter(function(l){return l.classification==='full';}).length;
+    var otDays   = logs.filter(function(l){return l.classification==='ot';}).length;
+    var rate = parseFloat(emp.dailyRate)||0;
+    var gross = (halfDays * rate * 0.5) + (fullDays * rate) + (otDays * rate * 1.5);
+    return {emp:emp, halfDays:halfDays, fullDays:fullDays, otDays:otDays, totalDays:logs.length, gross:gross};
+  });
+
+  var totalGross = payRows.reduce(function(s,r){return s+r.gross;},0);
+
+  var rowsHtml = payRows.map(function(r){
+    return '<tr>'
+      +'<td><strong>'+r.emp.name+'</strong><div style="font-size:10.5px;color:var(--text-dim)">'+r.emp.role+' · ₱'+(parseFloat(r.emp.dailyRate)||0).toLocaleString()+'/day</div></td>'
+      +'<td style="text-align:center">'+r.halfDays+'</td>'
+      +'<td style="text-align:center">'+r.fullDays+'</td>'
+      +'<td style="text-align:center">'+r.otDays+'</td>'
+      +'<td style="text-align:center;font-weight:700">'+r.totalDays+'</td>'
+      +'<td style="text-align:right;font-weight:700;color:var(--accent)">₱'+r.gross.toLocaleString()+'</td>'
+      +'<td style="text-align:center"><button class="btn btn-outline btn-xs" onclick="openPayslipAcct(\''+r.emp.id+'\',\''+pFrom+'\',\''+pTo+'\')">📄 Payslip</button></td>'
+      +'</tr>';
+  }).join('');
+
+  return '<div class="panel" style="margin-bottom:16px"><div class="panel-head">'
+    +'<div class="panel-title">💵 Payroll — '+moLabel+' ('+periodLabel+')</div>'
+    +'</div>'
+    +'<div class="panel-body">'
+    +'<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">Auto-computed from Daily Tracker audit. Half Day = 50% rate, Full Day = 100%, OT = 150%.</div>'
+    +(ACCT_EMPLOYEES.length ?
+      '<div class="tbl-wrap"><table><thead><tr><th>Employee</th><th style="text-align:center">½ Days</th><th style="text-align:center">Full</th><th style="text-align:center">OT</th><th style="text-align:center">Total</th><th style="text-align:right">Gross Pay</th><th style="text-align:center">Action</th></tr></thead>'
+      +'<tbody>'+rowsHtml
+      +'<tr style="font-weight:700;border-top:2px solid var(--border)"><td colspan="5" style="text-align:right">TOTAL PAYROLL</td><td style="text-align:right;color:var(--accent);font-size:15px">₱'+totalGross.toLocaleString()+'</td><td></td></tr>'
+      +'</tbody></table></div>'
+    : '<div class="empty" style="padding:16px"><div class="empty-ic">👥</div>Add employees first</div>')
+    +'</div></div>'
+    +'<div style="font-size:11px;color:var(--text-dim);padding:8px 12px;background:var(--bg-elev2);border-radius:8px">💡 Tip: Make sure daily audits are complete for this period before generating payslips. Classification is done in the Daily Tracker tab by the Head Tech.</div>';
+}
+
+function openPayslipAcct(empId, pFrom, pTo) {
+  var emp = ACCT_EMPLOYEES.find(function(x){return x.id===empId;});
+  if (!emp) { showToast('Employee not found','warning'); return; }
+  var logs = ACCT_DAILY_LOG.filter(function(l){
+    return l.employeeId===empId && l.date>=pFrom && l.date<=pTo && l.classification;
+  });
+  var halfDays = logs.filter(function(l){return l.classification==='half';}).length;
+  var fullDays = logs.filter(function(l){return l.classification==='full';}).length;
+  var otDays   = logs.filter(function(l){return l.classification==='ot';}).length;
+  var rate = parseFloat(emp.dailyRate)||0;
+  var gross = (halfDays*rate*0.5)+(fullDays*rate)+(otDays*rate*1.5);
+
+  var periodLabel = formatDate(pFrom)+' – '+formatDate(pTo);
+
+  document.getElementById('payslipBody').innerHTML = `
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="font-size:16px;font-weight:800">DJ-CE Airconditioning Services</div>
+      <div style="font-size:11px;color:var(--text-dim)">PAYSLIP</div>
+      <div style="font-size:12px;margin-top:4px;font-weight:600">${periodLabel}</div>
+    </div>
+    <div class="form-grid">
+      <div class="field"><label>Employee Name</label><input id="ps_name" value="${emp.name}"></div>
+      <div class="field"><label>Role</label><input id="ps_role" value="${emp.role}"></div>
+      <div class="field"><label>Daily Rate</label><input id="ps_rate" type="number" value="${rate}"></div>
+      <div class="field"><label>Half Days (×0.5)</label><input id="ps_half" type="number" value="${halfDays}"></div>
+      <div class="field"><label>Full Days (×1.0)</label><input id="ps_full" type="number" value="${fullDays}"></div>
+      <div class="field"><label>OT Days (×1.5)</label><input id="ps_ot" type="number" value="${otDays}"></div>
+      <div class="field"><label>Deductions (₱)</label><input id="ps_ded" type="number" value="0" placeholder="SSS, PhilHealth, etc."></div>
+      <div class="field"><label>Allowance / Bonus (₱)</label><input id="ps_bonus" type="number" value="0"></div>
+    </div>
+    <div style="margin-top:14px;padding:12px;background:var(--bg-elev2);border-radius:8px;font-size:13px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>Gross Pay:</span><strong style="color:var(--accent)">₱${gross.toLocaleString()}</strong></div>
+      <div style="font-size:11px;color:var(--text-dim)">All fields above are editable before downloading.</div>
+    </div>`;
+  document.getElementById('payslipSub').textContent = emp.name+' — '+periodLabel;
+  openModal('payslipModal');
+}
+
+// ─── 13TH MONTH SUB-TAB ──────────────────────────
+function renderAcct13th() {
+  var yr = new Date().getFullYear();
+
+  var rows = ACCT_EMPLOYEES.filter(function(e){return e.type==='fixed'||e.type==='commission';}).map(function(emp){
+    // Compute monthly earnings from daily log for the year
+    var monthlyAmts = [];
+    for (var m=1; m<=12; m++) {
+      var mStr = yr+'-'+String(m).padStart(2,'0');
+      var mLogs = ACCT_DAILY_LOG.filter(function(l){
+        return l.employeeId===emp.id && l.date && l.date.startsWith(mStr) && l.classification;
+      });
+      var rate = parseFloat(emp.dailyRate)||0;
+      var mGross = mLogs.reduce(function(s,l){
+        if (l.classification==='half') return s + rate*0.5;
+        if (l.classification==='full') return s + rate;
+        if (l.classification==='ot') return s + rate*1.5;
+        return s;
+      }, 0);
+      monthlyAmts.push(mGross);
+    }
+    var totalEarned = monthlyAmts.reduce(function(s,v){return s+v;},0);
+    var thirteenthMonth = totalEarned / 12;
+
+    // Monthly accumulation display
+    var accum = 0;
+    var monthCells = monthlyAmts.map(function(amt, i){
+      accum += amt / 12;
+      var moName = new Date(yr, i, 1).toLocaleString('default',{month:'short'});
+      return '<td style="text-align:right;font-size:11px" title="'+moName+': ₱'+(amt/12).toFixed(0)+' (accum: ₱'+accum.toFixed(0)+')">'
+        +'₱'+(amt/12).toFixed(0)+'</td>';
+    }).join('');
+
+    return '<tr>'
+      +'<td><strong>'+emp.name+'</strong><div style="font-size:10.5px;color:var(--text-dim)">'+emp.role+'</div></td>'
+      +monthCells
+      +'<td style="text-align:right;font-weight:700;color:var(--accent);font-size:13px">₱'+Math.round(thirteenthMonth).toLocaleString()+'</td>'
+      +'</tr>';
+  });
+
+  var moHeaders = '';
+  for (var m=0; m<12; m++) {
+    moHeaders += '<th style="text-align:right;font-size:10.5px;min-width:55px">'+new Date(yr,m,1).toLocaleString('default',{month:'short'})+'</th>';
+  }
+
+  return '<div class="panel"><div class="panel-head">'
+    +'<div class="panel-title">🎁 13th Month Pay — '+yr+'</div>'
+    +'</div><div class="panel-body">'
+    +'<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">Auto-computed from Daily Tracker. Monthly accumulation = (Monthly Gross ÷ 12). Released annually in December. Hover on cells for details.</div>'
+    +(rows.length ?
+      '<div class="tbl-wrap"><table><thead><tr><th>Employee</th>'+moHeaders+'<th style="text-align:right">13th Month</th></tr></thead>'
+      +'<tbody>'+rows.join('')+'</tbody></table></div>'
+    : '<div class="empty" style="padding:16px"><div class="empty-ic">🎁</div>No fixed/commission employees found. Add employees first.</div>')
+    +'</div></div>';
+}
+
+// ─── INVESTOR SHARES SUB-TAB ──────────────────────
+function renderAcctInvestors() {
+  // Compute yearly profit
+  var yr = new Date().getFullYear();
+  var yrFrom = yr+'-01-01', yrTo = yr+'-12-31';
+  var yrDone = Object.values(BOOKINGS).filter(function(b){return b.status==='Done'&&b.date&&b.date>=yrFrom&&b.date<=yrTo;});
+  var yrGross = yrDone.reduce(function(s,b){return s+(parseFloat(b.amount)||0);},0);
+  var yrExp = EXPENSES.filter(function(e){return e.date&&e.date>=yrFrom&&e.date<=yrTo;}).reduce(function(s,e){return s+(parseFloat(e.amount)||0);},0);
+  var yrNet = yrGross - yrExp;
+
+  var invHtml = '';
+  if (!ACCT_INVESTORS.length) {
+    invHtml = '<div class="empty" style="padding:24px"><div class="empty-ic">📊</div>No investors added yet.</div>';
+  } else {
+    var totalPct = ACCT_INVESTORS.reduce(function(s,i){return s+(parseFloat(i.percentage)||0);},0);
+    invHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">'
+      +ACCT_INVESTORS.map(function(inv){
+        var pct = parseFloat(inv.percentage)||0;
+        var share = yrNet>0 ? Math.round(yrNet * pct / 100) : 0;
+        var monthlyIpon = Math.round(share / 12);
+        return '<div style="background:var(--bg-elev2);border:1px solid var(--border);border-radius:10px;padding:14px">'
+          +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
+          +'<div style="font-weight:700;font-size:14px">'+inv.name+'</div>'
+          +'<span style="font-size:20px;font-weight:800;color:var(--accent)">'+pct+'%</span>'
+          +'</div>'
+          +'<div style="margin-top:10px;font-size:12px;color:var(--text-dim)">'
+          +'<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>Annual Share:</span><strong style="color:var(--success)">₱'+share.toLocaleString()+'</strong></div>'
+          +'<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>Monthly Ipon:</span><strong>₱'+monthlyIpon.toLocaleString()+'</strong></div>'
+          +(inv.notes?'<div style="margin-top:6px;font-size:11px">📝 '+inv.notes+'</div>':'')
+          +'</div>'
+          +'<div style="margin-top:10px;display:flex;gap:6px">'
+          +'<button class="btn btn-outline btn-xs" onclick="openEditInvestor(\''+inv.id+'\')">✏️ Edit</button>'
+          +'<button class="btn btn-outline btn-xs" style="color:var(--danger)" onclick="deleteInvestor(\''+inv.id+'\')">🗑️</button>'
+          +'</div></div>';
+      }).join('')+'</div>'
+      +'<div style="margin-top:12px;font-size:11.5px;color:var(--text-dim);text-align:right">Total allocation: <strong>'+totalPct+'%</strong>'+(totalPct>100?' ⚠️ Over 100%!':'')+'</div>';
+  }
+
+  return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:16px">'
+    +'<div class="stat-card stat-gold"><div class="stat-icon">💰</div><div class="stat-label">'+yr+' Gross</div><div class="stat-value" style="font-size:16px;color:var(--accent)">₱'+yrGross.toLocaleString()+'</div></div>'
+    +'<div class="stat-card stat-danger"><div class="stat-icon">💸</div><div class="stat-label">'+yr+' OPEX</div><div class="stat-value" style="font-size:16px;color:var(--danger)">₱'+yrExp.toLocaleString()+'</div></div>'
+    +'<div class="stat-card '+(yrNet>=0?'stat-success':'stat-danger')+'"><div class="stat-icon">'+(yrNet>=0?'📈':'📉')+'</div><div class="stat-label">'+yr+' Net Profit</div><div class="stat-value" style="font-size:16px;color:var(--'+(yrNet>=0?'success':'danger')+')">₱'+yrNet.toLocaleString()+'</div></div>'
+    +'</div>'
+    +'<div class="panel"><div class="panel-head"><div class="panel-title">📊 Investor Shares — '+yr+'</div>'
+    +'<button class="btn btn-gold btn-sm" onclick="openEditInvestor()">➕ Add Investor</button></div>'
+    +'<div class="panel-body">'
+    +'<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">Based on annual Net Profit. Monthly Ipon = Annual Share ÷ 12. Computed from actual bookings and expenses.</div>'
+    +invHtml
+    +'</div></div>';
+}
+
+function openEditInvestor(editId) {
+  var inv = editId ? ACCT_INVESTORS.find(function(x){return x.id===editId;}) : null;
+  var html = '<div class="form-grid">'
+    +'<div class="field"><label>Investor Name *</label><input id="inv_name" value="'+(inv?inv.name:'')+'" placeholder="e.g. Investor 1"></div>'
+    +'<div class="field"><label>Share Percentage (%) *</label><input type="number" id="inv_pct" value="'+(inv?inv.percentage||'':'')+'" placeholder="e.g. 30" min="0" max="100" step="0.5"></div>'
+    +'<div class="field form-full"><label>Notes</label><input id="inv_notes" value="'+(inv?inv.notes||'':'')+'" placeholder="Optional notes"></div>'
+    +'</div>';
+  document.getElementById('expModalTitle').textContent = inv ? 'Edit Investor' : 'Add Investor';
+  document.getElementById('expModalBody').innerHTML = html;
+  document.getElementById('expModalFoot').innerHTML =
+    '<button class="btn btn-outline btn-sm" onclick="closeModal(\'expenseModal\')">Cancel</button>'
+    +'<button class="btn btn-gold btn-sm" onclick="saveInvestor('+(editId?"'"+editId+"'":'null')+')">💾 Save</button>';
+  openModal('expenseModal');
+}
+
+function saveInvestor(editId) {
+  var name = (document.getElementById('inv_name').value||'').trim();
+  var pct = parseFloat(document.getElementById('inv_pct').value)||0;
+  if (!name) { showToast('Investor name is required','warning'); return; }
+  if (pct<=0||pct>100) { showToast('Percentage must be 1-100','warning'); return; }
+  var data = {
+    name: name,
+    percentage: pct,
+    notes: (document.getElementById('inv_notes').value||'').trim()
+  };
+  if (editId) {
+    var idx = ACCT_INVESTORS.findIndex(function(x){return x.id===editId;});
+    if (idx>=0) Object.assign(ACCT_INVESTORS[idx], data);
+  } else {
+    data.id = 'INV-'+Date.now();
+    ACCT_INVESTORS.push(data);
+  }
+  saveAcctData();
+  closeModal('expenseModal');
+  switchAcctTab('investors');
+  showToast(editId?'Investor updated':'Investor added','success');
+}
+
+function deleteInvestor(id) {
+  if (!confirm('Delete this investor?')) return;
+  ACCT_INVESTORS = ACCT_INVESTORS.filter(function(x){return x.id!==id;});
+  saveAcctData();
+  switchAcctTab('investors');
+  showToast('Investor removed','info');
+}
+
+/* ===========================
+   UNIT SALES MODULE (Batch 4)
+=========================== */
+var _unitTab = 'inventory'; // 'inventory' or 'sales'
+function switchUnitTab(t) { _unitTab = t; switchView('unitsales'); }
+
+function renderUnitSales() {
+  loadAcctData();
+  var tabBar = '<div style="display:flex;gap:6px;margin-bottom:16px">'
+    +'<button class="btn btn-sm '+(_unitTab==='inventory'?'btn-gold':'btn-outline')+'" onclick="switchUnitTab(\'inventory\')">📦 Inventory</button>'
+    +'<button class="btn btn-sm '+(_unitTab==='sales'?'btn-gold':'btn-outline')+'" onclick="switchUnitTab(\'sales\')">🧾 Sales</button>'
+    +'</div>';
+
+  // Sales KPIs
+  var now = new Date();
+  var mFrom = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-01';
+  var mthSales = UNIT_SALES.filter(function(s){return s.date&&s.date>=mFrom;});
+  var mthSalesRev = mthSales.reduce(function(s,x){return s+(parseFloat(x.totalPrice)||0);},0);
+  var allSalesRev = UNIT_SALES.reduce(function(s,x){return s+(parseFloat(x.totalPrice)||0);},0);
+  var totalStock = UNIT_PRODUCTS.reduce(function(s,p){return s+(parseInt(p.stock)||0);},0);
+
+  var kpi = '<div class="stats-grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr));margin-bottom:16px">'
+    +'<div class="stat-card stat-gold"><div class="stat-icon">📦</div><div class="stat-label">Products</div><div class="stat-value">'+UNIT_PRODUCTS.length+'</div><div class="stat-sub">'+totalStock+' units in stock</div></div>'
+    +'<div class="stat-card stat-success"><div class="stat-icon">🧾</div><div class="stat-label">Month Sales</div><div class="stat-value" style="color:var(--success)">'+mthSales.length+'</div><div class="stat-sub">₱'+mthSalesRev.toLocaleString()+' revenue</div></div>'
+    +'<div class="stat-card stat-gold"><div class="stat-icon">💰</div><div class="stat-label">All-Time Sales</div><div class="stat-value" style="color:var(--accent)">₱'+allSalesRev.toLocaleString()+'</div><div class="stat-sub">'+UNIT_SALES.length+' transactions</div></div>'
+    +'</div>';
+
+  var body = _unitTab==='inventory' ? renderUnitInventory() : renderUnitSalesLog();
+  return '<div style="margin-bottom:10px;font-size:12px;color:var(--text-dim)">🏷️ Unit Sales & Inventory</div>' + kpi + tabBar + body;
+}
+
+// ─── INVENTORY ────────────────────────────────────
+function renderUnitInventory() {
+  if (!UNIT_PRODUCTS.length) {
+    return '<div class="panel"><div class="panel-head"><div class="panel-title">📦 Product Inventory</div>'
+      +'<button class="btn btn-gold btn-sm" onclick="openEditProduct()">➕ Add Product</button></div>'
+      +'<div class="panel-body"><div class="empty" style="padding:24px"><div class="empty-ic">📦</div>No products yet. Add your first aircon unit for sale.</div></div></div>';
+  }
+  var cards = UNIT_PRODUCTS.map(function(p){
+    var lowStock = (parseInt(p.stock)||0) <= 2;
+    return '<div style="background:var(--bg-elev2);border:1px solid var(--border);border-radius:10px;padding:14px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
+      +'<div><div style="font-weight:700;font-size:14px">'+(p.brand||'')+' '+(p.model||'')+'</div>'
+      +'<div style="font-size:11.5px;color:var(--text-dim);margin-top:2px">'+(p.type||'Aircon')+' · '+(p.hp||'—')+' HP</div></div>'
+      +'<div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--accent)">₱'+(parseFloat(p.price)||0).toLocaleString()+'</div></div>'
+      +'</div>'
+      +'<div style="margin-top:10px;display:flex;gap:12px;font-size:12px">'
+      +'<span style="font-weight:700;color:'+(lowStock?'var(--danger)':'var(--success)')+'">📦 '+(p.stock||0)+' in stock'+(lowStock?' ⚠️':'')+'</span>'
+      +(p.notes?'<span style="color:var(--text-dim)">📝 '+p.notes+'</span>':'')
+      +'</div>'
+      +'<div style="margin-top:10px;display:flex;gap:6px">'
+      +'<button class="btn btn-gold btn-xs" onclick="openRecordSale(\''+p.id+'\')">🧾 Sell</button>'
+      +'<button class="btn btn-outline btn-xs" onclick="openEditProduct(\''+p.id+'\')">✏️ Edit</button>'
+      +'<button class="btn btn-outline btn-xs" style="color:var(--danger)" onclick="deleteProduct(\''+p.id+'\')">🗑️</button>'
+      +'</div></div>';
+  }).join('');
+
+  return '<div class="panel"><div class="panel-head"><div class="panel-title">📦 Product Inventory</div>'
+    +'<button class="btn btn-gold btn-sm" onclick="openEditProduct()">➕ Add Product</button></div>'
+    +'<div class="panel-body"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">'+cards+'</div></div></div>';
+}
+
+function openEditProduct(editId) {
+  var p = editId ? UNIT_PRODUCTS.find(function(x){return x.id===editId;}) : null;
+  var html = '<div class="form-grid">'
+    +'<div class="field"><label>Brand *</label><input id="prod_brand" value="'+(p?p.brand:'')+'" placeholder="e.g. Carrier, Daikin, Samsung"></div>'
+    +'<div class="field"><label>Model *</label><input id="prod_model" value="'+(p?p.model:'')+'" placeholder="e.g. FP-53CVA025"></div>'
+    +'<div class="field"><label>Type</label><select id="prod_type">'
+    +['Window Type','Split Type','Inverter Window','Inverter Split','Portable','Other'].map(function(t){return '<option '+(p&&p.type===t?'selected':'')+'>'+t+'</option>';}).join('')
+    +'</select></div>'
+    +'<div class="field"><label>HP</label><input id="prod_hp" value="'+(p?p.hp||'':'')+'" placeholder="e.g. 1.0, 1.5, 2.0"></div>'
+    +'<div class="field"><label>Selling Price (₱) *</label><input type="number" id="prod_price" value="'+(p?p.price||'':'')+'" placeholder="0" min="0"></div>'
+    +'<div class="field"><label>Stock Qty *</label><input type="number" id="prod_stock" value="'+(p?p.stock||'':'')+'" placeholder="0" min="0"></div>'
+    +'<div class="field form-full"><label>Notes</label><input id="prod_notes" value="'+(p?p.notes||'':'')+'" placeholder="e.g. with free installation"></div>'
+    +'</div>';
+  document.getElementById('expModalTitle').textContent = p ? 'Edit Product' : 'Add Product';
+  document.getElementById('expModalBody').innerHTML = html;
+  document.getElementById('expModalFoot').innerHTML =
+    '<button class="btn btn-outline btn-sm" onclick="closeModal(\'expenseModal\')">Cancel</button>'
+    +'<button class="btn btn-gold btn-sm" onclick="saveProduct('+(editId?"'"+editId+"'":'null')+')">💾 Save</button>';
+  openModal('expenseModal');
+}
+
+function saveProduct(editId) {
+  var brand = (document.getElementById('prod_brand').value||'').trim();
+  var model = (document.getElementById('prod_model').value||'').trim();
+  if (!brand||!model) { showToast('Brand and Model are required','warning'); return; }
+  var data = {
+    brand: brand, model: model,
+    type: document.getElementById('prod_type').value,
+    hp: (document.getElementById('prod_hp').value||'').trim(),
+    price: parseFloat(document.getElementById('prod_price').value)||0,
+    stock: parseInt(document.getElementById('prod_stock').value)||0,
+    notes: (document.getElementById('prod_notes').value||'').trim()
+  };
+  if (editId) {
+    var idx = UNIT_PRODUCTS.findIndex(function(x){return x.id===editId;});
+    if (idx>=0) Object.assign(UNIT_PRODUCTS[idx], data);
+  } else {
+    data.id = 'PROD-'+Date.now();
+    UNIT_PRODUCTS.push(data);
+  }
+  saveAcctData();
+  closeModal('expenseModal');
+  switchView('unitsales');
+  showToast(editId?'Product updated':'Product added','success');
+  logActivity('🏷️',(editId?'Updated':'Added')+' product: '+brand+' '+model,'inventory');
+}
+
+function deleteProduct(id) {
+  if (!confirm('Delete this product?')) return;
+  UNIT_PRODUCTS = UNIT_PRODUCTS.filter(function(x){return x.id!==id;});
+  saveAcctData();
+  switchView('unitsales');
+  showToast('Product removed','info');
+}
+
+// ─── SALES LOG ────────────────────────────────────
+function renderUnitSalesLog() {
+  if (!UNIT_SALES.length) {
+    return '<div class="panel"><div class="panel-head"><div class="panel-title">🧾 Sales Log</div>'
+      +'<button class="btn btn-gold btn-sm" onclick="openRecordSale()">➕ Record Sale</button></div>'
+      +'<div class="panel-body"><div class="empty" style="padding:24px"><div class="empty-ic">🧾</div>No sales recorded yet.</div></div></div>';
+  }
+  var rows = UNIT_SALES.slice().sort(function(a,b){return (b.date||'').localeCompare(a.date||'');}).map(function(s){
+    var prod = UNIT_PRODUCTS.find(function(p){return p.id===s.productId;});
+    var prodName = prod ? prod.brand+' '+prod.model : (s.productId||'Unknown');
+    return '<tr>'
+      +'<td style="font-size:12px">'+formatDate(s.date)+'</td>'
+      +'<td><strong>'+prodName+'</strong></td>'
+      +'<td style="text-align:center">'+s.qty+'</td>'
+      +'<td style="text-align:right">₱'+(parseFloat(s.unitPrice)||0).toLocaleString()+'</td>'
+      +'<td style="text-align:right;font-weight:700;color:var(--accent)">₱'+(parseFloat(s.totalPrice)||0).toLocaleString()+'</td>'
+      +'<td>'+s.buyer+'</td>'
+      +'<td style="text-align:center"><button class="btn btn-outline btn-xs" style="color:var(--danger)" onclick="deleteSale(\''+s.id+'\')">🗑️</button></td>'
+      +'</tr>';
+  }).join('');
+
+  return '<div class="panel"><div class="panel-head"><div class="panel-title">🧾 Sales Log</div>'
+    +'<button class="btn btn-gold btn-sm" onclick="openRecordSale()">➕ Record Sale</button></div>'
+    +'<div class="panel-body"><div class="tbl-wrap"><table>'
+    +'<thead><tr><th>Date</th><th>Product</th><th style="text-align:center">Qty</th><th style="text-align:right">Unit Price</th><th style="text-align:right">Total</th><th>Buyer</th><th style="text-align:center">Action</th></tr></thead>'
+    +'<tbody>'+rows+'</tbody></table></div></div></div>';
+}
+
+function openRecordSale(prodId) {
+  var today = new Date().toISOString().split('T')[0];
+  var prodOptions = UNIT_PRODUCTS.map(function(p){
+    return '<option value="'+p.id+'" '+(prodId===p.id?'selected':'')+'>'+p.brand+' '+p.model+' (₱'+p.price.toLocaleString()+', '+p.stock+' in stock)</option>';
+  }).join('');
+  if (!UNIT_PRODUCTS.length) {
+    showToast('Add products first in the Inventory tab','warning');
+    return;
+  }
+  var html = '<div class="form-grid">'
+    +'<div class="field"><label>Date *</label><input type="date" id="sale_date" value="'+today+'"></div>'
+    +'<div class="field"><label>Product *</label><select id="sale_prod">'+prodOptions+'</select></div>'
+    +'<div class="field"><label>Quantity *</label><input type="number" id="sale_qty" value="1" min="1"></div>'
+    +'<div class="field"><label>Unit Price (₱)</label><input type="number" id="sale_price" value="'+(prodId?((UNIT_PRODUCTS.find(function(p){return p.id===prodId;})||{}).price||0):'')+'"></div>'
+    +'<div class="field"><label>Buyer Name *</label><input id="sale_buyer" placeholder="Customer name"></div>'
+    +'<div class="field"><label>Phone</label><input id="sale_phone" placeholder="Optional"></div>'
+    +'<div class="field form-full"><label>Notes</label><input id="sale_notes" placeholder="e.g. with installation, warranty"></div>'
+    +'</div>';
+  document.getElementById('expModalTitle').textContent = 'Record Unit Sale';
+  document.getElementById('expModalBody').innerHTML = html;
+  document.getElementById('expModalFoot').innerHTML =
+    '<button class="btn btn-outline btn-sm" onclick="closeModal(\'expenseModal\')">Cancel</button>'
+    +'<button class="btn btn-gold btn-sm" onclick="saveSale()">💾 Save Sale</button>';
+  // Auto-fill price when product changes
+  document.getElementById('sale_prod').addEventListener('change', function(){
+    var selProd = UNIT_PRODUCTS.find(function(p){return p.id===document.getElementById('sale_prod').value;});
+    if (selProd) document.getElementById('sale_price').value = selProd.price;
+  });
+  // Set initial price if product pre-selected
+  if (!prodId && UNIT_PRODUCTS.length) {
+    document.getElementById('sale_price').value = UNIT_PRODUCTS[0].price;
+  }
+  openModal('expenseModal');
+}
+
+function saveSale() {
+  var prodId = document.getElementById('sale_prod').value;
+  var qty = parseInt(document.getElementById('sale_qty').value)||0;
+  var buyer = (document.getElementById('sale_buyer').value||'').trim();
+  var date = document.getElementById('sale_date').value;
+  if (!prodId||!qty||!buyer||!date) { showToast('Fill in all required fields','warning'); return; }
+  var prod = UNIT_PRODUCTS.find(function(p){return p.id===prodId;});
+  if (!prod) { showToast('Product not found','warning'); return; }
+  if (qty > (parseInt(prod.stock)||0)) { showToast('Not enough stock! Only '+prod.stock+' available.','warning'); return; }
+  var unitPrice = parseFloat(document.getElementById('sale_price').value)||prod.price;
+  var sale = {
+    id: 'SALE-'+Date.now(),
+    date: date,
+    productId: prodId,
+    qty: qty,
+    unitPrice: unitPrice,
+    totalPrice: unitPrice * qty,
+    buyer: buyer,
+    phone: (document.getElementById('sale_phone').value||'').trim(),
+    notes: (document.getElementById('sale_notes').value||'').trim(),
+    soldBy: session.name
+  };
+  UNIT_SALES.push(sale);
+  // Deduct stock
+  prod.stock = (parseInt(prod.stock)||0) - qty;
+  saveAcctData();
+  closeModal('expenseModal');
+  switchView('unitsales');
+  showToast('Sale recorded! '+prod.brand+' '+prod.model+' x'+qty+' to '+buyer,'success');
+  logActivity('🏷️','Unit sale: '+prod.brand+' '+prod.model+' x'+qty+' to '+buyer+' (₱'+sale.totalPrice.toLocaleString()+')','sales');
+}
+
+function deleteSale(id) {
+  if (!confirm('Delete this sale record? Stock will NOT be restored automatically.')) return;
+  UNIT_SALES = UNIT_SALES.filter(function(x){return x.id!==id;});
+  saveAcctData();
+  switchView('unitsales');
+  showToast('Sale record removed','info');
+}
+
+/* ===========================
    ACTIVITY LOG
 =========================== */
 function renderActivity() {
@@ -5063,20 +6077,30 @@ async function fetchFromSheets() {
         if (!id) return;
         const normalized = {
           id: id,
+          refNo: (b.refNo || '').trim(),
           name: (b.name || '').trim(),
           phone: (b.phone || '').trim(),
           email: (b.email || '').trim(),
-          address: (b.address || '').trim(),
+          houseNo: (b.houseNo || '').trim(),
+          street: (b.street || '').trim(),
+          barangay: (b.barangay || '').trim(),
+          city: (b.city || '').trim(),
+          address: (b.fullAddress || b.address || '').trim(),
           landmark: (b.landmark || '').trim(),
           lat: (b.lat || '').trim(),
           lng: (b.lng || '').trim(),
           service: (b.service || b.services || '').trim(),
           serviceDetails: (b.serviceDetails || '').trim(),
-          date: (b.date || '').trim(),
-          time: (b.time || '').trim(),
+          date: (b.date || '').toString().substring(0,10).trim(),
+          time: (b.timeSlot || b.time || '').trim(),
           technician: (b.technician || b.assignedTo || b.assigned || '').trim(),
           status: (b.status || 'Pending').trim(),
           amount: (b.amount || '').trim(),
+          feeService: (b.feeService || '').trim(),
+          feeParts: (b.feeParts || '').trim(),
+          feeTranspo: (b.feeTranspo || '').trim(),
+          feeOther: (b.feeOther || '').trim(),
+          feeDiscount: (b.feeDiscount || '').trim(),
           usage: (b.usageFrequency || b.usage || '').trim(),
           nextCleaningDate: (b.nextCleaningDate || '').trim(),
           notes: (b.notes || '').trim(),
@@ -5274,9 +6298,9 @@ function syncAccountToSheets(acc) {
     .then(function(res) { if (res && res.ok) console.log('Account synced: @' + acc.username); })
     .catch(function() {});
 }
-function addNotif(msg, type) {
+function addNotif(msg, type, targetId) {
   const id = 'n' + Date.now();
-  NOTIFS.unshift({ id, msg: msg||'', type: type||'info', read: false, time: new Date().toISOString() });
+  NOTIFS.unshift({ id, msg: msg||'', type: type||'info', read: false, time: new Date().toISOString(), target: targetId||'' });
   if (NOTIFS.length > 50) NOTIFS.pop();
   renderNotifs();
   updateNavBadges();
@@ -5288,9 +6312,18 @@ function renderNotifs() {
   if (dot) dot.style.display = unread?'':'none';
   const list = document.getElementById('notifList');
   if (!list) return;
-  list.innerHTML = NOTIFS.length?NOTIFS.slice(0,15).map(function(n){return '<div class="notif-item '+(n.read?'':'unread')+'" onclick="readNotif('+n.id+')">'+'<div class="notif-msg">'+n.icon+' '+n.msg+'</div>'+'<div class="notif-time">'+formatTimeAgo(n.time)+'</div></div>';}).join(''):'<div class="empty" style="padding:20px">No notifications</div>';
+  list.innerHTML = NOTIFS.length?NOTIFS.slice(0,15).map(function(n){return '<div class="notif-item '+(n.read?'':'unread')+'" onclick="readNotif(\''+n.id+'\',\''+((n.target||'').replace(/'/g,''))+'\')'+'" style="cursor:pointer">'+'<div class="notif-msg">'+(n.icon||'🔔')+' '+n.msg+'</div>'+'<div class="notif-time">'+formatTimeAgo(n.time)+(n.target?' · <span style="color:var(--accent);font-size:10px">View →</span>':'')+'</div></div>';}).join(''):'<div class="empty" style="padding:20px">No notifications</div>';
 }
-function readNotif(id) { const n=NOTIFS.find(x=>x.id===id); if(n) n.read=true; renderNotifs(); }
+function readNotif(id, targetId) {
+  const n=NOTIFS.find(x=>x.id===id);
+  if(n) n.read=true;
+  renderNotifs();
+  // Navigate to target booking if exists
+  if (targetId && BOOKINGS[targetId]) {
+    toggleNotif(); // close notification panel
+    openBookingDetail(targetId);
+  }
+}
 function markAllRead() { NOTIFS.forEach(n=>n.read=true); renderNotifs(); }
 function toggleNotif(e) { e?.stopPropagation(); document.getElementById('notifPanel')?.classList.toggle('show'); }
 
@@ -5353,8 +6386,13 @@ function showToast(msg, type='info', duration=3500) {
 =========================== */
 function formatDate(d) {
   if (!d) return '—';
-  try { return new Date(d+'T00:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}); }
-  catch(e) { return d; }
+  try {
+    var clean = String(d).substring(0,10).trim();
+    if (!clean) return '—';
+    var dt = new Date(clean+'T00:00:00');
+    if (isNaN(dt.getTime())) return clean;
+    return dt.toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'});
+  } catch(e) { return d || '—'; }
 }
 function formatTimeAgo(iso) {
   const d=new Date(iso), n=new Date(), diff=Math.floor((n-d)/1000);
