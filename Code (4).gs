@@ -49,6 +49,18 @@ var HEADERS = {
   ],
   ScheduleSlots: [
     'Slot ID','Date','Time Slot','Max Bookings','Current Bookings','Status','Created By','Created At','Notes'
+  ],
+  Employees: [
+    'Employee ID','Name','Role','Type','Daily Rate','Status','Phone','Start Date','Notes','Created At'
+  ],
+  DailyTracker: [
+    'Record ID','Date','Employee ID','Employee Name','Booking IDs','Jobs Count','Classification','Audited By','Audit Notes','Created At'
+  ],
+  Payroll: [
+    'Payroll ID','Period From','Period To','Employee ID','Employee Name','Days Worked','Half Days','Full Days','OT Days','Daily Rate','Gross Pay','Deductions','Net Pay','13th Month Accrual','Status','Generated At','Approved By','Notes'
+  ],
+  InvestorShares: [
+    'Record ID','Investor Name','Share Percent','Year','Month','Monthly Ipon','Notes','Created At'
   ]
 };
 
@@ -60,7 +72,11 @@ var SHEET_STYLES = {
   ActivityLog:   { bg: '#1e3a5f', fg: '#ffffff' },
   Expenses:      { bg: '#7f1d1d', fg: '#ffffff' },
   RefNumbers:    { bg: '#064e3b', fg: '#ffffff' },
-  ScheduleSlots: { bg: '#1e3a5f', fg: '#f59e0b' }
+  ScheduleSlots: { bg: '#1e3a5f', fg: '#f59e0b' },
+  Employees:     { bg: '#065f46', fg: '#f59e0b' },
+  DailyTracker:  { bg: '#1e3a5f', fg: '#ffffff' },
+  Payroll:       { bg: '#7f1d1d', fg: '#f59e0b' },
+  InvestorShares:{ bg: '#064e3b', fg: '#f59e0b' }
 };
 
 /* ─── TIME SLOTS ──────────────────────────────────────────── */
@@ -111,6 +127,17 @@ function doGet(e) {
         case 'closeSlot':           result = closeSlot(params);           break;
         case 'deleteSlot':          result = deleteSlot(params);          break;
         case 'getAllSlots':          result = getAllSlots(params);         break;
+        case 'getEmployees':        result = getEmployees();              break;
+        case 'saveEmployee':        result = saveEmployee(params);        break;
+        case 'deleteEmployee':      result = deleteEmployee(params);      break;
+        case 'getDailyTracker':     result = getDailyTracker(params);     break;
+        case 'saveDailyRecord':     result = saveDailyRecord(params);     break;
+        case 'updateDailyRecord':   result = updateDailyRecord(params);   break;
+        case 'getPayroll':          result = getPayroll(params);          break;
+        case 'savePayroll':         result = savePayroll(params);         break;
+        case 'getInvestors':        result = getInvestors();              break;
+        case 'saveInvestor':        result = saveInvestor(params);        break;
+        case 'deleteInvestor':      result = deleteInvestor(params);      break;
         default: result = { ok: false, error: 'Unknown action: ' + action };
       }
     }
@@ -934,6 +961,229 @@ function sendClientConfirmationEmail(id, data, svcSummary, fullAddress) {
     htmlBody: body,
     replyTo: NOTIF_EMAIL
   });
+}
+
+/* ─── EMPLOYEES ──────────────────────────────────────────── */
+function getEmployees() {
+  var sheet = getOrCreateSheet('Employees');
+  var data = sheet.getDataRange().getValues();
+  if (data.length < 2) return { ok: true, employees: [] };
+  var headers = data[0];
+  var employees = [];
+  for (var i = 1; i < data.length; i++) {
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) {
+      obj[headerToKey(headers[j])] = cellToString(data[i][j]);
+    }
+    employees.push(obj);
+  }
+  return { ok: true, employees: employees };
+}
+
+function saveEmployee(p) {
+  var data = p.data ? JSON.parse(decodeURIComponent(p.data)) : p;
+  var sheet = getOrCreateSheet('Employees');
+  var rows = sheet.getDataRange().getValues();
+  // Update existing
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === String(data.id)) {
+      var r = i + 1;
+      sheet.getRange(r, 2).setValue(data.name || '');
+      sheet.getRange(r, 3).setValue(data.role || '');
+      sheet.getRange(r, 4).setValue(data.type || '');
+      sheet.getRange(r, 5).setValue(data.dailyRate || '');
+      sheet.getRange(r, 6).setValue(data.status || 'Active');
+      sheet.getRange(r, 7).setValue(data.phone || '');
+      sheet.getRange(r, 8).setValue(data.startDate || '');
+      sheet.getRange(r, 9).setValue(data.notes || '');
+      return { ok: true, action: 'updated', id: data.id };
+    }
+  }
+  // Create new
+  var id = data.id || ('EMP-' + new Date().getTime());
+  sheet.appendRow([
+    id, data.name||'', data.role||'', data.type||'', data.dailyRate||'',
+    data.status||'Active', data.phone||'', data.startDate||'', data.notes||'', now()
+  ]);
+  return { ok: true, action: 'created', id: id };
+}
+
+function deleteEmployee(p) {
+  var id = p.id;
+  if (!id) return { ok: false, error: 'Missing employee ID' };
+  var sheet = getOrCreateSheet('Employees');
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === String(id)) {
+      sheet.deleteRow(i + 1);
+      return { ok: true, action: 'deleted', id: id };
+    }
+  }
+  return { ok: false, error: 'Employee not found: ' + id };
+}
+
+/* ─── DAILY TRACKER ──────────────────────────────────────── */
+function getDailyTracker(p) {
+  var sheet = getOrCreateSheet('DailyTracker');
+  var data = sheet.getDataRange().getValues();
+  if (data.length < 2) return { ok: true, records: [] };
+  var headers = data[0];
+  var records = [];
+  // Optional filter by month (ym = '2026-10')
+  var ym = p.ym || '';
+  for (var i = 1; i < data.length; i++) {
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) {
+      obj[headerToKey(headers[j])] = cellToString(data[i][j]);
+    }
+    if (ym && obj.date && obj.date.substring(0,7) !== ym) continue;
+    records.push(obj);
+  }
+  return { ok: true, records: records };
+}
+
+function saveDailyRecord(p) {
+  var data = p.data ? JSON.parse(decodeURIComponent(p.data)) : p;
+  var sheet = getOrCreateSheet('DailyTracker');
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === String(data.id)) {
+      return { ok: true, action: 'already_exists', id: data.id };
+    }
+  }
+  var id = data.id || ('DTR-' + new Date().getTime());
+  sheet.appendRow([
+    id, data.date||'', data.employeeId||'', data.employeeName||'',
+    data.bookingIds||'', data.jobsCount||0, data.classification||'',
+    data.auditedBy||'', data.auditNotes||'', now()
+  ]);
+  return { ok: true, action: 'created', id: id };
+}
+
+function updateDailyRecord(p) {
+  var data = p.data ? JSON.parse(decodeURIComponent(p.data)) : p;
+  var id = data.id || p.id;
+  if (!id) return { ok: false, error: 'Missing record ID' };
+  var sheet = getOrCreateSheet('DailyTracker');
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === String(id)) {
+      var r = i + 1;
+      if (data.classification !== undefined) sheet.getRange(r, 7).setValue(data.classification);
+      if (data.auditedBy !== undefined) sheet.getRange(r, 8).setValue(data.auditedBy);
+      if (data.auditNotes !== undefined) sheet.getRange(r, 9).setValue(data.auditNotes);
+      return { ok: true, action: 'updated', id: id };
+    }
+  }
+  return { ok: false, error: 'Record not found: ' + id };
+}
+
+/* ─── PAYROLL ────────────────────────────────────────────── */
+function getPayroll(p) {
+  var sheet = getOrCreateSheet('Payroll');
+  var data = sheet.getDataRange().getValues();
+  if (data.length < 2) return { ok: true, records: [] };
+  var headers = data[0];
+  var records = [];
+  var ym = p.ym || '';
+  for (var i = 1; i < data.length; i++) {
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) {
+      obj[headerToKey(headers[j])] = cellToString(data[i][j]);
+    }
+    if (ym && obj.periodFrom && obj.periodFrom.substring(0,7) !== ym) continue;
+    records.push(obj);
+  }
+  return { ok: true, records: records };
+}
+
+function savePayroll(p) {
+  var data = p.data ? JSON.parse(decodeURIComponent(p.data)) : p;
+  var sheet = getOrCreateSheet('Payroll');
+  var rows = sheet.getDataRange().getValues();
+  // Update if exists
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === String(data.id)) {
+      var r = i + 1;
+      sheet.getRange(r, 6).setValue(data.daysWorked || 0);
+      sheet.getRange(r, 7).setValue(data.halfDays || 0);
+      sheet.getRange(r, 8).setValue(data.fullDays || 0);
+      sheet.getRange(r, 9).setValue(data.otDays || 0);
+      sheet.getRange(r, 10).setValue(data.dailyRate || 0);
+      sheet.getRange(r, 11).setValue(data.grossPay || 0);
+      sheet.getRange(r, 12).setValue(data.deductions || 0);
+      sheet.getRange(r, 13).setValue(data.netPay || 0);
+      sheet.getRange(r, 14).setValue(data.thirteenthMonthAccrual || 0);
+      sheet.getRange(r, 15).setValue(data.status || 'Draft');
+      sheet.getRange(r, 17).setValue(data.approvedBy || '');
+      sheet.getRange(r, 18).setValue(data.notes || '');
+      return { ok: true, action: 'updated', id: data.id };
+    }
+  }
+  // Create new
+  var id = data.id || ('PAY-' + new Date().getTime());
+  sheet.appendRow([
+    id, data.periodFrom||'', data.periodTo||'', data.employeeId||'', data.employeeName||'',
+    data.daysWorked||0, data.halfDays||0, data.fullDays||0, data.otDays||0,
+    data.dailyRate||0, data.grossPay||0, data.deductions||0, data.netPay||0,
+    data.thirteenthMonthAccrual||0, data.status||'Draft', now(), data.approvedBy||'', data.notes||''
+  ]);
+  return { ok: true, action: 'created', id: id };
+}
+
+/* ─── INVESTOR SHARES ────────────────────────────────────── */
+function getInvestors() {
+  var sheet = getOrCreateSheet('InvestorShares');
+  var data = sheet.getDataRange().getValues();
+  if (data.length < 2) return { ok: true, investors: [] };
+  var headers = data[0];
+  var investors = [];
+  for (var i = 1; i < data.length; i++) {
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) {
+      obj[headerToKey(headers[j])] = cellToString(data[i][j]);
+    }
+    investors.push(obj);
+  }
+  return { ok: true, investors: investors };
+}
+
+function saveInvestor(p) {
+  var data = p.data ? JSON.parse(decodeURIComponent(p.data)) : p;
+  var sheet = getOrCreateSheet('InvestorShares');
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === String(data.id)) {
+      var r = i + 1;
+      sheet.getRange(r, 2).setValue(data.investorName || '');
+      sheet.getRange(r, 3).setValue(data.sharePercent || 0);
+      sheet.getRange(r, 4).setValue(data.year || '');
+      sheet.getRange(r, 5).setValue(data.month || '');
+      sheet.getRange(r, 6).setValue(data.monthlyIpon || 0);
+      sheet.getRange(r, 7).setValue(data.notes || '');
+      return { ok: true, action: 'updated', id: data.id };
+    }
+  }
+  var id = data.id || ('INV-' + new Date().getTime());
+  sheet.appendRow([
+    id, data.investorName||'', data.sharePercent||0, data.year||'',
+    data.month||'', data.monthlyIpon||0, data.notes||'', now()
+  ]);
+  return { ok: true, action: 'created', id: id };
+}
+
+function deleteInvestor(p) {
+  var id = p.id;
+  if (!id) return { ok: false, error: 'Missing investor record ID' };
+  var sheet = getOrCreateSheet('InvestorShares');
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === String(id)) {
+      sheet.deleteRow(i + 1);
+      return { ok: true, action: 'deleted', id: id };
+    }
+  }
+  return { ok: false, error: 'Investor record not found: ' + id };
 }
 
 /* ─── EMAIL HELPERS ───────────────────────────────────────── */
