@@ -1444,96 +1444,115 @@ function buildSlotCalendar(){
     byDate[s.date].push(s);
   });
 
-  // ── Generate next 30 calendar days ──
+  // ── We show the current month and next month ──
   const today = new Date();
   today.setHours(0,0,0,0);
-  const days = [];
-  for(var i = 0; i < 30; i++){
-    var d = new Date(today.getTime() + i * 86400000);
-    days.push(d.toISOString().split('T')[0]); // YYYY-MM-DD
-  }
-
-  // ── Month/Year header ──
+  const todayStr = today.toISOString().split('T')[0];
   const monthNames = ['January','February','March','April','May','June',
     'July','August','September','October','November','December'];
+  const dayHeaders = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-  let html = '';
+  var html = '';
 
-  // ── Group days by month ──
-  const monthGroups = {};
-  days.forEach(function(dateStr){
-    var key = dateStr.substring(0,7); // YYYY-MM
-    if(!monthGroups[key]) monthGroups[key] = [];
-    monthGroups[key].push(dateStr);
-  });
+  // Show 2 months (current + next)
+  for(var m = 0; m < 2; m++){
+    var viewDate = new Date(today.getFullYear(), today.getMonth()+m, 1);
+    var year = viewDate.getFullYear();
+    var month = viewDate.getMonth();
+    var mName = monthNames[month] + ' ' + year;
+    var firstDay = viewDate.getDay(); // 0=Sun
+    var daysInMonth = new Date(year, month+1, 0).getDate();
 
-  const slotColors  = {morning:'#f59e0b', afternoon:'#3b82f6', evening:'#8b5cf6'};
-  const slotIcons   = {morning:'☀️', afternoon:'🌤️', evening:'🌆'};
-  const ALL_PERIODS = ['morning','afternoon','evening'];
-  const PERIOD_LABELS = {morning:'Morning', afternoon:'Afternoon', evening:'Evening'};
-  const PERIOD_TIMES  = {morning:'9:00 AM – 12:00 PM', afternoon:'1:00 PM – 4:00 PM', evening:'5:00 PM – 7:00 PM'};
+    html += '<div style="margin-bottom:18px;">';
+    html += '<div style="font-family:Nunito,sans-serif;font-size:15px;font-weight:800;color:#f59e0b;margin-bottom:8px;text-align:center;">📆 ' + mName + '</div>';
 
-  Object.keys(monthGroups).sort().forEach(function(monthKey){
-    var parts = monthKey.split('-');
-    var mName = monthNames[parseInt(parts[1])-1] + ' ' + parts[0];
+    // Day headers row
+    html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px;">';
+    dayHeaders.forEach(function(dh){
+      html += '<div style="text-align:center;font-size:10px;font-weight:700;color:rgba(255,255,255,0.4);text-transform:uppercase;padding:4px 0;">'+dh+'</div>';
+    });
+    html += '</div>';
 
-    html += '<div style="margin-bottom:20px;">';
-    html += '<div style="font-family:Nunito,sans-serif;font-size:16px;font-weight:800;color:var(--navy);margin-bottom:12px;">📆 ' + mName + '</div>';
+    // Calendar grid
+    html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">';
 
-    // ── Date grid (horizontal scroll on mobile) ──
-    html += '<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;-webkit-overflow-scrolling:touch;">';
-    monthGroups[monthKey].forEach(function(dateStr){
-      var d = new Date(dateStr+'T00:00:00');
-      var dayName = d.toLocaleDateString('en-PH',{weekday:'short'});
-      var dayNum  = d.getDate();
-      var isToday = dateStr === today.toISOString().split('T')[0];
+    // Empty cells before first day
+    for(var e = 0; e < firstDay; e++){
+      html += '<div></div>';
+    }
+
+    // Day cells
+    for(var day = 1; day <= daysInMonth; day++){
+      var dateStr = year+'-'+String(month+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+      var isPast = dateStr < todayStr;
+      var isToday = dateStr === todayStr;
       var dateSlots = byDate[dateStr] || [];
 
-      // ── Determine status ──
-      // GREEN: at least 1 available slot
-      // RED:   admin opened slots but ALL are full/closed
-      // GRAY:  no slots opened for this date at all
       var hasOpen = dateSlots.some(function(s){ return s.remaining > 0; });
       var hasAny  = dateSlots.length > 0;
 
-      var status, dotColor, borderColor, bgColor, cursor;
-      if(hasOpen){
+      var status, dotColor, bgColor, borderColor, cursor, numColor;
+      if(isPast){
+        status = 'past';
+        bgColor = 'transparent';
+        borderColor = 'transparent';
+        dotColor = '';
+        cursor = 'default';
+        numColor = 'rgba(255,255,255,0.15)';
+      } else if(hasOpen){
         status = 'available';
-        dotColor = '#10b981';    // green
-        borderColor = '#10b98155';
-        bgColor = 'rgba(16,185,129,0.08)';
+        dotColor = '#10b981';
+        bgColor = 'rgba(16,185,129,0.1)';
+        borderColor = 'rgba(16,185,129,0.3)';
         cursor = 'pointer';
+        numColor = '#fff';
       } else if(hasAny){
         status = 'full';
-        dotColor = '#ef4444';    // red
-        borderColor = '#ef444455';
+        dotColor = '#ef4444';
         bgColor = 'rgba(239,68,68,0.08)';
+        borderColor = 'rgba(239,68,68,0.25)';
         cursor = 'not-allowed';
+        numColor = 'rgba(255,255,255,0.4)';
       } else {
         status = 'none';
-        dotColor = '#9ca3af';    // gray
-        borderColor = 'rgba(255,255,255,0.1)';
-        bgColor = 'rgba(255,255,255,0.04)';
+        dotColor = '';
+        bgColor = 'rgba(255,255,255,0.03)';
+        borderColor = 'rgba(255,255,255,0.06)';
         cursor = 'not-allowed';
+        numColor = 'rgba(255,255,255,0.3)';
       }
 
-      html += '<button type="button" class="slot-date-btn" data-date="'+dateStr+'" data-status="'+status+'" '
-        + 'onclick="'+(status==='available'?'pickDate(this)':'')+'" '
-        + (status!=='available'?'disabled ':'')
-        + 'style="flex-shrink:0;width:62px;padding:8px 4px;border:1.5px solid '+borderColor+';'
-        + 'border-radius:12px;background:'+bgColor+';cursor:'+cursor+';text-align:center;transition:all .15s;position:relative;">';
-      html += '<div style="font-size:10px;font-weight:600;color:var(--gray);text-transform:uppercase;">'+dayName+'</div>';
-      html += '<div style="font-size:20px;font-weight:800;color:'+(status==='available'?'#fff':'rgba(255,255,255,0.4)')+';">'+dayNum+'</div>';
-      // Status dot
-      html += '<div style="width:8px;height:8px;border-radius:50%;background:'+dotColor+';margin:4px auto 0;"></div>';
-      // Today badge
-      if(isToday) html += '<div style="font-size:9px;font-weight:700;color:#f59e0b;margin-top:2px;">TODAY</div>';
-      html += '</button>';
-    });
-    html += '</div>'; // end date grid
+      var todayRing = isToday ? 'box-shadow:0 0 0 2px #f59e0b;' : '';
+      var slotsLeft = 0;
+      if(hasOpen) dateSlots.forEach(function(s){ slotsLeft += (s.remaining||0); });
 
-    html += '</div>'; // end month group
-  });
+      html += '<button type="button" class="slot-date-btn" data-date="'+dateStr+'" data-status="'+status+'" '
+        + (status==='available'?'onclick="pickDate(this)"':'disabled ')
+        + 'style="padding:6px 2px;border:1px solid '+borderColor+';border-radius:8px;background:'+bgColor+';'
+        + 'cursor:'+cursor+';text-align:center;transition:all .15s;position:relative;min-height:44px;'+todayRing+'">';
+      html += '<div style="font-size:14px;font-weight:700;color:'+numColor+';">'+day+'</div>';
+      if(dotColor){
+        html += '<div style="width:6px;height:6px;border-radius:50%;background:'+dotColor+';margin:2px auto 0;"></div>';
+      }
+      if(hasOpen){
+        html += '<div style="font-size:8px;font-weight:600;color:#10b981;margin-top:1px;">'+slotsLeft+' slot'+(slotsLeft!==1?'s':'')+'</div>';
+      }
+      if(isToday){
+        html += '<div style="font-size:7px;font-weight:800;color:#f59e0b;margin-top:1px;">TODAY</div>';
+      }
+      html += '</button>';
+    }
+
+    html += '</div>'; // end grid
+    html += '</div>'; // end month
+  }
+
+  // Legend
+  html += '<div style="display:flex;gap:14px;justify-content:center;margin:8px 0 4px;flex-wrap:wrap;">';
+  html += '<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:rgba(255,255,255,0.5);"><div style="width:8px;height:8px;border-radius:50%;background:#10b981;"></div> Available</div>';
+  html += '<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:rgba(255,255,255,0.5);"><div style="width:8px;height:8px;border-radius:50%;background:#ef4444;"></div> Full</div>';
+  html += '<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:rgba(255,255,255,0.5);"><div style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.2);"></div> No slots</div>';
+  html += '</div>';
 
   // ── Time slot detail area (appears when a green date is clicked) ──
   html += '<div id="slot-time-picker" style="display:none;margin-top:8px;padding:14px;border:1.5px solid var(--border);border-radius:14px;background:rgba(255,255,255,0.06);"></div>';
@@ -1548,12 +1567,12 @@ function pickDate(btn){
   // Deselect all date buttons
   document.querySelectorAll('.slot-date-btn').forEach(function(b){
     if(b.dataset.status==='available'){
-      b.style.background='rgba(16,185,129,0.08)';
-      b.style.borderColor='#10b98155';
+      b.style.background='rgba(16,185,129,0.1)';
+      b.style.borderColor='rgba(16,185,129,0.3)';
     }
   });
   // Highlight selected date
-  btn.style.background='rgba(16,185,129,0.18)';
+  btn.style.background='rgba(16,185,129,0.25)';
   btn.style.borderColor='#10b981';
 
   // Clear any previous slot selection
@@ -1633,7 +1652,7 @@ function pickDate(btn){
 function selectSlot(btn){
   // Deselect all time slot buttons
   document.querySelectorAll('.slot-time-btn').forEach(function(b){
-    b.style.background='white';
+    b.style.background='rgba(255,255,255,0.06)';
     var c = b.dataset.timeSlot==='morning'?'#f59e0b':b.dataset.timeSlot==='afternoon'?'#3b82f6':'#8b5cf6';
     b.style.borderColor=c+'55';
   });
@@ -2025,9 +2044,8 @@ function initMap(){
 
     leafletMap = L.map('pin-map-leaflet').setView([defaultLat, defaultLng], 14);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
-      subdomains: 'abcd',
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+      attribution: '&copy; Esri &mdash; Sources: Esri, HERE, Garmin, USGS',
       maxZoom: 19
     }).addTo(leafletMap);
 
