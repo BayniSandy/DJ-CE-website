@@ -1175,6 +1175,7 @@ let COMM_LOG = [];       // { id, bookingId, clientName, type:'call'|'text'|'ema
 let INVENTORY = [];      // { id, name, category, qty, unit, minStock, cost, notes }
 let FEEDBACK = [];       // { id, bookingId, clientName, rating, comment, date }
 let WARRANTY_LOG = [];   // { id, bookingId, clientName, service, warrantyDays, startDate, endDate, notes }
+let TIME_CORRECTIONS = []; // { id, bookingId, field:'actualStart'|'actualEnd', oldVal, newVal, reason, editedBy, timestamp }
 var _loginAttempts = 0;
 var _loginLockUntil = 0;
 const MAX_LOGIN_ATTEMPTS = 5;
@@ -2047,6 +2048,28 @@ function openBookingDetail(id) {
         })()}
       </div>
     </div>
+    <!-- Timekeeping Section -->
+    <div class="sec-divider" style="margin-top:16px">⏱️ Timekeeping</div>
+    <div style="background:var(--bg-elev2);border-radius:10px;padding:14px;border:1px solid var(--border);margin-bottom:12px">
+      <div class="form-grid" style="margin-bottom:8px">
+        <div class="info-row"><span class="info-label">Scheduled Time</span><span class="info-val">${b.time||'—'}</span></div>
+        <div class="info-row"><span class="info-label">Actual Start</span><span class="info-val">${b.actualStart?'<strong style="color:var(--info)">'+formatTimeShort(b.actualStart)+'</strong>':'<span style="color:var(--text-dim)">Not recorded</span>'}</span></div>
+        <div class="info-row"><span class="info-label">Actual End</span><span class="info-val">${b.actualEnd?'<strong style="color:var(--success)">'+formatTimeShort(b.actualEnd)+'</strong>':'<span style="color:var(--text-dim)">Not recorded</span>'}</span></div>
+        <div class="info-row"><span class="info-label">Actual Hours</span><span class="info-val">${b.actualStart&&b.actualEnd?'<strong style="color:var(--accent)">'+calcActualHours(b.actualStart,b.actualEnd)+' hrs</strong>':'<span style="color:var(--text-dim)">—</span>'}</span></div>
+        ${b.investorCovered?'<div class="info-row"><span class="info-label">Investor Job</span><span class="info-val"><span style="color:var(--accent);font-weight:700">📊 Investor-Covered</span></span></div>':''}
+      </div>
+      ${session.role!=='tech'?'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button class="btn btn-outline btn-xs" onclick="openCorrectTime(\''+id+'\')">✏️ Correct Time</button><button class="btn btn-xs '+(b.investorCovered?'btn-gold':'btn-outline')+'" onclick="toggleInvestorCovered(\''+id+'\')">💼 '+(b.investorCovered?'Investor ✓':'Mark Investor')+'</button></div>':''}
+      ${(function(){
+        var corrs = TIME_CORRECTIONS.filter(function(c){return c.bookingId===id;});
+        if (!corrs.length) return '';
+        return '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px"><div style="font-size:11px;font-weight:700;color:var(--text-dim);margin-bottom:6px">📝 Correction History</div>'
+          +corrs.map(function(c){
+            return '<div style="font-size:11px;color:var(--text-dim);padding:3px 0;border-bottom:1px solid var(--border)">'
+              +'<strong>'+c.field+'</strong>: '+(c.oldVal?formatTimeShort(c.oldVal):'(empty)')+' → '+formatTimeShort(c.newVal)
+              +' — by '+c.editedBy+' · '+(c.reason||'no reason')+' · '+new Date(c.timestamp).toLocaleDateString()+'</div>';
+          }).join('')+'</div>';
+      })()}
+    </div>
     ${session.role!=='tech'?`
     <div class="sec-divider" style="margin-top:16px">Update Booking</div>
     <div class="form-grid">
@@ -2361,6 +2384,7 @@ function openNewBooking(name='',phone='',address='') {
       <div class="field"><label>AC Usage Frequency</label>
         <select id="nb_usage"><option value="">— For follow-up tracking —</option>${USAGE_OPTS.map(u=>`<option>${u.label}</option>`).join('')}</select>
       </div>
+      ${session.role!=='tech'?'<div class="field"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="nb_investor" style="width:18px;height:18px"> 💼 Investor-Covered Job</label></div>':''}
       <div class="field form-full"><label>Additional Notes</label><textarea id="nb_notes" placeholder="Other instructions, special requests..."></textarea></div>
     </div>`;
   document.getElementById('emFoot').innerHTML = `
@@ -2414,7 +2438,8 @@ async function saveBooking() {
     amount: document.getElementById('nb_amount')?.value||'',
     notes: document.getElementById('nb_notes')?.value||'',
     usage, nextCleaningDate: calcNextCleaning(date, usage),
-    status:'Pending', createdAt: new Date().toISOString(), source:'manual'
+    status:'Pending', createdAt: new Date().toISOString(), source:'manual',
+    investorCovered: !!(document.getElementById('nb_investor')&&document.getElementById('nb_investor').checked)
   };
   // Auto-rebook: mark old Done bookings for same client+service as "Completed - Rebooked"
   Object.values(BOOKINGS).forEach(function(old) {
@@ -2619,15 +2644,38 @@ function renderMyJobs() {
   function techJobCard(b) {
     var mapsUrl=b.mapLat?'https://maps.google.com/?q='+b.mapLat+','+b.mapLng:'https://maps.google.com/?q='+encodeURIComponent(b.address||'');
     var callUrl = b.phone ? 'tel:'+b.phone.replace(/[^0-9+]/g,'') : '';
+    // Timekeeping display
+    var tkHtml = '';
+    if (b.actualStart && b.actualEnd) {
+      var hrs = calcActualHours(b.actualStart, b.actualEnd);
+      tkHtml = '<div style="margin-top:8px;padding:8px 10px;background:rgba(46,204,113,.1);border:1px solid var(--success);border-radius:8px;font-size:11.5px">'
+        +'<span style="color:var(--success);font-weight:700">⏱️ '+formatTimeShort(b.actualStart)+' — '+formatTimeShort(b.actualEnd)+'</span>'
+        +' <span style="color:var(--text-dim)">('+ hrs +' hrs)</span></div>';
+    } else if (b.actualStart) {
+      tkHtml = '<div style="margin-top:8px;padding:8px 10px;background:rgba(52,152,219,.12);border:1px solid var(--info);border-radius:8px;font-size:11.5px">'
+        +'<span style="color:var(--info);font-weight:700">🔵 Started '+formatTimeShort(b.actualStart)+'</span>'
+        +' <span style="color:var(--text-dim)">(ongoing)</span></div>';
+    }
+    // Time action buttons
+    var timeBtn = '';
+    if (b.status!=='Done' && b.status!=='Cancelled') {
+      if (!b.actualStart) {
+        timeBtn = '<button class="btn btn-info btn-xs" style="font-weight:700" onclick="event.stopPropagation();techStartWork(\''+b.id+'\')">▶️ Start Work</button>';
+      } else if (!b.actualEnd) {
+        timeBtn = '<button class="btn btn-warning btn-xs" style="font-weight:700" onclick="event.stopPropagation();techEndWork(\''+b.id+'\')">⏹️ End Work</button>';
+      }
+    }
     return '<div class="booking-card" style="border-left:4px solid '+(b.status==='Ongoing'?'var(--success)':b.status==='Confirmed'?'var(--accent)':'var(--warning)')+'" onclick="openBookingDetail(\''+b.id+'\')">'
       +'<div class="bc-head"><div class="bc-avatar">'+((b.name||'?')[0].toUpperCase())+'</div><div><div class="bc-name">'+(b.name||'—')+'</div><div class="bc-id">'+b.id+'</div></div><span class="status-badge s-'+((b.status||'pending').toLowerCase())+'" style="margin-left:auto">'+b.status+'</span></div>'
       +'<div class="bc-service">🔧 '+(b.service||'—')+'</div>'
       +(b.serviceDetails?'<div style="font-size:11px;color:var(--text-dim);margin-top:2px">'+b.serviceDetails+'</div>':'')
       +'<div style="font-size:12px;color:var(--text-dim);margin:6px 0">📍 '+(b.address||'—')+'</div>'
       +'<div class="bc-meta"><span class="bc-tag" style="background:var(--bg-elev2)">📅 '+formatDate(b.date)+'</span><span class="bc-tag" style="background:var(--bg-elev2)">🕐 '+(b.time||'—')+'</span>'+(b.amount?'<span class="bc-tag" style="background:var(--bg-elev2)">💰 ₱'+parseFloat(b.amount).toLocaleString()+'</span>':'')+'</div>'
+      +tkHtml
       +'<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">'
       +'<a href="'+mapsUrl+'" target="_blank" class="btn btn-outline btn-xs" onclick="event.stopPropagation()">📍 Navigate</a>'
       +(callUrl?'<a href="'+callUrl+'" class="btn btn-outline btn-xs" onclick="event.stopPropagation()">📞 Call</a>':'')
+      +timeBtn
       +'<button class="btn btn-info btn-xs" onclick="event.stopPropagation();techQuickStatus(\''+b.id+'\')" >🔄 Status</button>'
       +'<button class="btn btn-success btn-xs" onclick="event.stopPropagation();markDone(\''+b.id+'\')" >✅ Done</button>'
       +'</div></div>';
@@ -2672,6 +2720,139 @@ function techQuickStatus(id) {
     switchView('my-jobs');
     showToast('Status updated to '+opts[idx],'success');
   }
+}
+
+/* ===========================
+   TIMEKEEPING HELPERS
+=========================== */
+function formatTimeShort(iso) {
+  if (!iso) return '—';
+  try {
+    var d = new Date(iso);
+    var h = d.getHours(), m = d.getMinutes();
+    var ampm = h>=12?'PM':'AM';
+    h = h%12||12;
+    return h+':'+String(m).padStart(2,'0')+' '+ampm;
+  } catch(e) { return '—'; }
+}
+
+function calcActualHours(startIso, endIso) {
+  if (!startIso||!endIso) return '0.0';
+  var ms = new Date(endIso) - new Date(startIso);
+  if (ms<0) return '0.0';
+  return (ms/3600000).toFixed(1);
+}
+
+function techStartWork(id) {
+  var b = BOOKINGS[id];
+  if (!b) return;
+  if (b.actualStart) { showToast('Already started','info'); return; }
+  // Check overlap: is this tech already working on another job?
+  var now = new Date();
+  var today = now.toISOString().split('T')[0];
+  var overlap = Object.values(BOOKINGS).find(function(ob){
+    return ob.id!==id && ob.technician===b.technician && ob.date===today && ob.actualStart && !ob.actualEnd;
+  });
+  if (overlap) {
+    if (!confirm('⚠️ You have another job still in progress ('+overlap.id+' — '+overlap.service+').\n\nThat job\'s End Work will be auto-recorded now.\n\nContinue?')) return;
+    // Auto-end the overlapping job
+    overlap.actualEnd = now.toISOString();
+    showToast('Auto-ended '+overlap.id+' ('+calcActualHours(overlap.actualStart, overlap.actualEnd)+' hrs)','info');
+  }
+  b.actualStart = now.toISOString();
+  if (b.status==='Confirmed'||b.status==='Pending') b.status = 'Ongoing';
+  saveLocalData();
+  switchView('my-jobs');
+  showToast('⏱️ Work started at '+formatTimeShort(b.actualStart),'success');
+  logActivity('⏱️','Started work on '+b.id+' ('+b.service+') at '+formatTimeShort(b.actualStart),'timekeeping');
+}
+
+function techEndWork(id) {
+  var b = BOOKINGS[id];
+  if (!b) return;
+  if (!b.actualStart) { showToast('Start work first','warning'); return; }
+  if (b.actualEnd) { showToast('Already ended','info'); return; }
+  var now = new Date();
+  // Sanity check: end must be after start
+  if (now < new Date(b.actualStart)) { showToast('End time cannot be before start time','error'); return; }
+  b.actualEnd = now.toISOString();
+  var hrs = calcActualHours(b.actualStart, b.actualEnd);
+  saveLocalData();
+  switchView('my-jobs');
+  showToast('⏹️ Work ended — '+hrs+' hours recorded','success');
+  logActivity('⏹️','Ended work on '+b.id+' ('+b.service+') — '+hrs+' hrs','timekeeping');
+}
+
+/* ===========================
+   TIME CORRECTION (Admin/Owner)
+=========================== */
+function openCorrectTime(id) {
+  var b = BOOKINGS[id];
+  if (!b) return;
+  var startVal = b.actualStart ? new Date(new Date(b.actualStart).getTime() - new Date(b.actualStart).getTimezoneOffset()*60000).toISOString().slice(0,16) : '';
+  var endVal = b.actualEnd ? new Date(new Date(b.actualEnd).getTime() - new Date(b.actualEnd).getTimezoneOffset()*60000).toISOString().slice(0,16) : '';
+  document.getElementById('expenseModalTitle').textContent = '✏️ Correct Time — ' + (b.id||id);
+  document.getElementById('expenseModalBody').innerHTML =
+    '<div style="display:flex;flex-direction:column;gap:12px">'+
+      '<label style="font-weight:600;font-size:13px">Actual Start'+
+        '<input type="datetime-local" id="ctStart" value="'+startVal+'" class="form-control" style="margin-top:4px">'+
+      '</label>'+
+      '<label style="font-weight:600;font-size:13px">Actual End'+
+        '<input type="datetime-local" id="ctEnd" value="'+endVal+'" class="form-control" style="margin-top:4px">'+
+      '</label>'+
+      '<label style="font-weight:600;font-size:13px">Reason for correction <span style="color:var(--danger)">*</span>'+
+        '<input type="text" id="ctReason" placeholder="e.g. Tech forgot to clock in" class="form-control" style="margin-top:4px" maxlength="200">'+
+      '</label>'+
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">'+
+        '<button class="btn btn-outline btn-sm" onclick="closeExpenseModal()">Cancel</button>'+
+        '<button class="btn btn-gold btn-sm" onclick="saveCorrectTime(\''+id+'\')">💾 Save Correction</button>'+
+      '</div>'+
+    '</div>';
+  document.getElementById('expenseModal').style.display = 'flex';
+}
+
+function saveCorrectTime(id) {
+  var b = BOOKINGS[id];
+  if (!b) return;
+  var reason = (document.getElementById('ctReason').value||'').trim();
+  if (!reason) { showToast('Please enter a reason for the correction','warning'); return; }
+  var startInput = document.getElementById('ctStart').value;
+  var endInput = document.getElementById('ctEnd').value;
+  var newStart = startInput ? new Date(startInput).toISOString() : '';
+  var newEnd = endInput ? new Date(endInput).toISOString() : '';
+  // Validate: end must be after start if both provided
+  if (newStart && newEnd && new Date(newEnd) <= new Date(newStart)) {
+    showToast('End time must be after start time','error'); return;
+  }
+  var now = new Date().toISOString();
+  var editor = session.username || 'unknown';
+  // Record corrections for changed fields
+  if ((b.actualStart||'') !== newStart) {
+    TIME_CORRECTIONS.push({ id: 'TC'+Date.now()+'a', bookingId: id, field: 'actualStart',
+      oldVal: b.actualStart||'', newVal: newStart, reason: reason, editedBy: editor, timestamp: now });
+  }
+  if ((b.actualEnd||'') !== newEnd) {
+    TIME_CORRECTIONS.push({ id: 'TC'+Date.now()+'b', bookingId: id, field: 'actualEnd',
+      oldVal: b.actualEnd||'', newVal: newEnd, reason: reason, editedBy: editor, timestamp: now });
+  }
+  // Apply corrections
+  b.actualStart = newStart || undefined;
+  b.actualEnd = newEnd || undefined;
+  saveLocalData();
+  closeExpenseModal();
+  openBookingDetail(id); // refresh detail view
+  showToast('✅ Time corrected — audit trail saved','success');
+  logActivity('✏️','Corrected time for '+id+' by '+editor+': '+reason,'timekeeping');
+}
+
+function toggleInvestorCovered(id) {
+  var b = BOOKINGS[id];
+  if (!b) return;
+  b.investorCovered = !b.investorCovered;
+  saveLocalData();
+  openBookingDetail(id);
+  showToast(b.investorCovered?'💼 Marked as investor-covered':'Investor tag removed','success');
+  logActivity('💼',(b.investorCovered?'Tagged':'Untagged')+' investor-covered: '+id,'timekeeping');
 }
 
 /* ===========================
@@ -5670,6 +5851,7 @@ function renderAccounting() {
   var tabs = [
     {id:'employees', icon:'👥', label:'Employees'},
     {id:'daily',     icon:'📋', label:'Daily Tracker'},
+    {id:'timekeeping', icon:'⏱️', label:'Timekeeping'},
     {id:'payroll',   icon:'💵', label:'Payroll'},
     {id:'13th',      icon:'🎁', label:'13th Month'},
     {id:'investors', icon:'📊', label:'Investor Shares'},
@@ -5684,6 +5866,7 @@ function renderAccounting() {
   switch(_acctTab) {
     case 'employees': body = renderAcctEmployees(); break;
     case 'daily':     body = renderAcctDaily(); break;
+    case 'timekeeping': body = renderAcctTimekeeping(); break;
     case 'payroll':   body = renderAcctPayroll(); break;
     case '13th':      body = renderAcct13th(); break;
     case 'investors': body = renderAcctInvestors(); break;
@@ -5888,6 +6071,184 @@ function saveDailyAudit(dateStr) {
   switchAcctTab('daily');
   showToast('Audit saved for '+formatDate(dateStr)+' ('+saved+' entries)','success');
   logActivity('📋','Daily audit saved for '+dateStr,'accounting');
+}
+
+// ─── TIMEKEEPING & LABOR COST SUB-TAB ─────────────
+function renderAcctTimekeeping() {
+  var dateInput = '<input type="date" id="tkDate" value="'+(document.getElementById('tkDate')?.value||new Date().toISOString().split('T')[0])+'" onchange="switchView(\'accounting\')" style="font-size:13px;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-elev2);color:var(--text)">';
+  var selDate = document.getElementById('tkDate')?.value || new Date().toISOString().split('T')[0];
+
+  // Get all bookings for selected date that have actual time records
+  var dayBookings = Object.values(BOOKINGS).filter(function(b) {
+    return b.date === selDate && b.technician;
+  });
+
+  // Group by technician
+  var techMap = {};
+  dayBookings.forEach(function(b) {
+    var tech = b.technician;
+    if (!techMap[tech]) techMap[tech] = [];
+    techMap[tech].push(b);
+  });
+
+  // Build timesheet rows
+  var timesheetHtml = '';
+  var techNames = Object.keys(techMap).sort();
+  if (!techNames.length) {
+    timesheetHtml = '<div class="empty" style="padding:24px"><div class="empty-ic">⏱️</div>No assigned jobs for this date.</div>';
+  } else {
+    timesheetHtml = '<div class="tbl-wrap"><table><thead><tr><th>Technician</th><th>Job Ref</th><th>Service</th><th>Sched Time</th><th>Actual Start</th><th>Actual End</th><th>Actual Hrs</th><th>Status</th><th>💼</th></tr></thead><tbody>';
+    var totalHrs = 0;
+    techNames.forEach(function(tech) {
+      var jobs = techMap[tech];
+      var techTotal = 0;
+      jobs.forEach(function(b, idx) {
+        var hrs = (b.actualStart && b.actualEnd) ? parseFloat(calcActualHours(b.actualStart, b.actualEnd)) : 0;
+        techTotal += hrs;
+        totalHrs += hrs;
+        var hasActual = b.actualStart || b.actualEnd;
+        var rowColor = !hasActual ? 'color:var(--text-dim)' : '';
+        timesheetHtml += '<tr style="'+rowColor+'">'
+          +(idx===0?'<td rowspan="'+jobs.length+'" style="font-weight:700;vertical-align:top">'+tech+'</td>':'')
+          +'<td style="font-size:11px">'+b.id+'</td>'
+          +'<td style="font-size:11.5px">'+b.service+'</td>'
+          +'<td style="font-size:11.5px">'+(b.time||'—')+'</td>'
+          +'<td style="font-size:11.5px">'+(b.actualStart?formatTimeShort(b.actualStart):'<span style="color:var(--warning)">—</span>')+'</td>'
+          +'<td style="font-size:11.5px">'+(b.actualEnd?formatTimeShort(b.actualEnd):'<span style="color:var(--warning)">—</span>')+'</td>'
+          +'<td style="font-weight:600">'+(hrs?hrs.toFixed(1)+' hrs':'—')+'</td>'
+          +'<td><span class="bc-tag s-'+(b.status||'').toLowerCase().replace(/\s+/g,'-')+'">'+(b.status||'—')+'</span></td>'
+          +'<td>'+(b.investorCovered?'💼':'')+'</td>'
+          +'</tr>';
+      });
+      // Tech subtotal row
+      timesheetHtml += '<tr style="background:var(--bg-elev2);font-size:11.5px"><td colspan="6" style="text-align:right;font-weight:600">'+tech+' Total:</td><td style="font-weight:700;color:var(--accent)">'+techTotal.toFixed(1)+' hrs</td><td colspan="2"></td></tr>';
+    });
+    timesheetHtml += '</tbody></table></div>';
+
+    // Overlap warnings
+    var overlapWarnings = '';
+    techNames.forEach(function(tech) {
+      var jobs = techMap[tech].filter(function(b){ return b.actualStart; }).sort(function(a,b){ return new Date(a.actualStart)-new Date(b.actualStart); });
+      for (var i=0; i<jobs.length-1; i++) {
+        if (jobs[i].actualEnd && new Date(jobs[i].actualEnd) > new Date(jobs[i+1].actualStart)) {
+          overlapWarnings += '<div style="background:color-mix(in srgb,var(--warning) 12%,transparent);border:1px solid var(--warning);border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:12px">⚠️ <strong>'+tech+'</strong>: '+jobs[i].id+' overlaps with '+jobs[i+1].id+'</div>';
+        }
+      }
+    });
+    if (overlapWarnings) timesheetHtml = '<div style="margin-bottom:12px">'+overlapWarnings+'</div>' + timesheetHtml;
+  }
+
+  // ── Labor Cost Allocation ──
+  var laborHtml = '';
+  var allWithTime = Object.values(BOOKINGS).filter(function(b) { return b.date === selDate && b.technician && b.actualStart && b.actualEnd; });
+  if (allWithTime.length) {
+    // Group by technician for allocation
+    var allocMap = {};
+    allWithTime.forEach(function(b) {
+      var tech = b.technician;
+      if (!allocMap[tech]) allocMap[tech] = {jobs:[], totalHrs:0, emp:null};
+      var hrs = parseFloat(calcActualHours(b.actualStart, b.actualEnd));
+      allocMap[tech].jobs.push({booking:b, hrs:hrs});
+      allocMap[tech].totalHrs += hrs;
+      // Find employee record
+      if (!allocMap[tech].emp) {
+        allocMap[tech].emp = ACCT_EMPLOYEES.find(function(e){ return e.name === tech; });
+      }
+    });
+
+    laborHtml = '<div style="margin-top:20px"><div style="font-weight:700;font-size:14px;margin-bottom:10px">💰 Labor Cost Allocation</div>';
+    laborHtml += '<div class="tbl-wrap"><table><thead><tr><th>Technician</th><th>Job Ref</th><th>Service</th><th>Hours</th><th>% of Day</th><th>Daily Rate</th><th>Allocated Cost</th><th>💼 Investor</th><th>Flag</th></tr></thead><tbody>';
+    var totalInvestorCost = 0, totalRegularCost = 0, flaggedCount = 0;
+    Object.keys(allocMap).sort().forEach(function(tech) {
+      var data = allocMap[tech];
+      var rate = data.emp ? parseFloat(data.emp.dailyRate)||0 : 0;
+      var noRate = !rate;
+      data.jobs.forEach(function(j, idx) {
+        var pct = data.totalHrs > 0 ? (j.hrs / data.totalHrs) : 0;
+        var allocCost = rate * pct;
+        var isInvestor = j.booking.investorCovered;
+        if (isInvestor) totalInvestorCost += allocCost;
+        else totalRegularCost += allocCost;
+        var needsFlag = noRate || data.totalHrs <= 0;
+        if (needsFlag) flaggedCount++;
+        laborHtml += '<tr>'
+          +(idx===0?'<td rowspan="'+data.jobs.length+'" style="font-weight:700;vertical-align:top">'+tech+'</td>':'')
+          +'<td style="font-size:11px">'+j.booking.id+'</td>'
+          +'<td style="font-size:11.5px">'+j.booking.service+'</td>'
+          +'<td>'+j.hrs.toFixed(1)+'</td>'
+          +'<td>'+(pct*100).toFixed(0)+'%</td>'
+          +(idx===0?'<td rowspan="'+data.jobs.length+'" style="vertical-align:top">₱'+(rate?rate.toLocaleString():'<span style="color:var(--danger)">?</span>')+'</td>':'')
+          +'<td style="font-weight:600">₱'+allocCost.toFixed(0)+'</td>'
+          +'<td style="text-align:center">'+(isInvestor?'💼✓':'')+'</td>'
+          +'<td>'+(needsFlag?'<span style="color:var(--danger)" title="'+(noRate?'No daily rate set':'No recorded hours')+'">⚠️ Review</span>':'✅')+'</td>'
+          +'</tr>';
+      });
+    });
+    laborHtml += '</tbody></table></div>';
+
+    // Summary cards
+    laborHtml += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-top:14px">'
+      +'<div style="background:color-mix(in srgb,var(--accent) 10%,transparent);border-radius:10px;padding:14px;text-align:center">'
+      +'<div style="font-size:11px;color:var(--text-dim)">💼 Investor Labor Cost</div><div style="font-size:20px;font-weight:800;color:var(--accent)">₱'+totalInvestorCost.toFixed(0)+'</div></div>'
+      +'<div style="background:color-mix(in srgb,var(--info) 10%,transparent);border-radius:10px;padding:14px;text-align:center">'
+      +'<div style="font-size:11px;color:var(--text-dim)">🔧 Regular Labor Cost</div><div style="font-size:20px;font-weight:800;color:var(--info)">₱'+totalRegularCost.toFixed(0)+'</div></div>'
+      +'<div style="background:color-mix(in srgb,var(--success) 10%,transparent);border-radius:10px;padding:14px;text-align:center">'
+      +'<div style="font-size:11px;color:var(--text-dim)">📊 Total Allocated</div><div style="font-size:20px;font-weight:800;color:var(--success)">₱'+(totalInvestorCost+totalRegularCost).toFixed(0)+'</div></div>'
+      +(flaggedCount?'<div style="background:color-mix(in srgb,var(--danger) 10%,transparent);border-radius:10px;padding:14px;text-align:center">'
+      +'<div style="font-size:11px;color:var(--text-dim)">⚠️ Needs Review</div><div style="font-size:20px;font-weight:800;color:var(--danger)">'+flaggedCount+'</div></div>':'')
+      +'</div>';
+    laborHtml += '</div>';
+  }
+
+  // ── Investor Report Summary (Monthly) ──
+  var month = selDate.slice(0,7); // YYYY-MM
+  var monthBookings = Object.values(BOOKINGS).filter(function(b) {
+    return b.date && b.date.startsWith(month) && b.technician && b.actualStart && b.actualEnd;
+  });
+  var investorReport = '';
+  if (monthBookings.length) {
+    var invTotal=0, regTotal=0, invJobs=0, regJobs=0;
+    monthBookings.forEach(function(b) {
+      var emp = ACCT_EMPLOYEES.find(function(e){ return e.name === b.technician; });
+      var rate = emp ? parseFloat(emp.dailyRate)||0 : 0;
+      // Find all jobs for this tech on this date to calculate proportion
+      var sameTechDay = monthBookings.filter(function(ob){ return ob.technician === b.technician && ob.date === b.date; });
+      var dayTotalHrs = 0;
+      sameTechDay.forEach(function(ob){ dayTotalHrs += parseFloat(calcActualHours(ob.actualStart, ob.actualEnd)); });
+      var hrs = parseFloat(calcActualHours(b.actualStart, b.actualEnd));
+      var pct = dayTotalHrs > 0 ? hrs/dayTotalHrs : 0;
+      var cost = rate * pct;
+      if (b.investorCovered) { invTotal += cost; invJobs++; }
+      else { regTotal += cost; regJobs++; }
+    });
+
+    investorReport = '<div style="margin-top:24px;border-top:1px solid var(--border);padding-top:16px">'
+      +'<div style="font-weight:700;font-size:14px;margin-bottom:10px">📊 Monthly Investor Report — '+month+'</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">'
+      +'<div style="background:color-mix(in srgb,var(--accent) 10%,transparent);border-radius:10px;padding:14px">'
+        +'<div style="font-size:11px;color:var(--text-dim)">💼 Investor-Covered Jobs</div>'
+        +'<div style="font-size:22px;font-weight:800;color:var(--accent)">'+invJobs+'</div>'
+        +'<div style="font-size:12px;color:var(--text-dim);margin-top:4px">Labor: ₱'+invTotal.toFixed(0)+'</div></div>'
+      +'<div style="background:color-mix(in srgb,var(--info) 10%,transparent);border-radius:10px;padding:14px">'
+        +'<div style="font-size:11px;color:var(--text-dim)">🔧 Regular DJC Jobs</div>'
+        +'<div style="font-size:22px;font-weight:800;color:var(--info)">'+regJobs+'</div>'
+        +'<div style="font-size:12px;color:var(--text-dim);margin-top:4px">Labor: ₱'+regTotal.toFixed(0)+'</div></div>'
+      +'<div style="background:color-mix(in srgb,var(--success) 10%,transparent);border-radius:10px;padding:14px">'
+        +'<div style="font-size:11px;color:var(--text-dim)">📈 Total Month Labor</div>'
+        +'<div style="font-size:22px;font-weight:800;color:var(--success)">₱'+(invTotal+regTotal).toFixed(0)+'</div>'
+        +'<div style="font-size:12px;color:var(--text-dim);margin-top:4px">'+(invJobs+regJobs)+' jobs w/ time records</div></div>'
+      +'</div>'
+      +'<div style="margin-top:10px;font-size:11.5px;color:var(--text-dim);font-style:italic">⚠️ Jobs without actual time records are excluded. Ensure all jobs are clocked in/out for accurate reporting.</div>'
+      +'</div>';
+  }
+
+  return '<div style="font-weight:700;font-size:15px;margin-bottom:12px">⏱️ Timekeeping & Labor Cost</div>'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">'
+    +'<span style="font-size:13px;font-weight:600">📅 Date:</span>'+dateInput+'</div>'
+    +'<div style="font-weight:700;font-size:14px;margin-bottom:8px">📋 Daily Timesheet</div>'
+    +timesheetHtml
+    +laborHtml
+    +investorReport;
 }
 
 // ─── PAYROLL SUB-TAB ──────────────────────────────
@@ -6902,6 +7263,7 @@ function saveLocalData() {
   localStorage.setItem('djce_inventory', JSON.stringify(INVENTORY));
   localStorage.setItem('djce_feedback', JSON.stringify(FEEDBACK));
   localStorage.setItem('djce_warranty', JSON.stringify(WARRANTY_LOG));
+  localStorage.setItem('djce_time_corrections', JSON.stringify(TIME_CORRECTIONS));
 }
 
 function loadLocalData() {
@@ -6918,6 +7280,7 @@ function loadLocalData() {
   try { INVENTORY = JSON.parse(localStorage.getItem('djce_inventory')||'[]'); } catch(e) { INVENTORY=[]; }
   try { FEEDBACK = JSON.parse(localStorage.getItem('djce_feedback')||'[]'); } catch(e) { FEEDBACK=[]; }
   try { WARRANTY_LOG = JSON.parse(localStorage.getItem('djce_warranty')||'[]'); } catch(e) { WARRANTY_LOG=[]; }
+  try { TIME_CORRECTIONS = JSON.parse(localStorage.getItem('djce_time_corrections')||'[]'); } catch(e) { TIME_CORRECTIONS=[]; }
   autoPurgeTrash();
 }
 
