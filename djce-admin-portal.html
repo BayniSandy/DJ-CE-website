@@ -692,8 +692,27 @@ tr:hover td { background:var(--bg-elev2); }
         </div>
 
         <button class="btn-login" id="loginBtn" onclick="handleLogin()">Sign In →</button>
+        <div style="text-align:center;margin-top:12px">
+          <span style="font-size:12px;color:var(--accent);cursor:pointer;text-decoration:underline" onclick="showForgotPassword()">Forgot Password?</span>
+        </div>
 
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- FORGOT PASSWORD MODAL -->
+<div id="forgotPwScreen" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center;padding:20px">
+  <div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:20px;max-width:420px;width:100%;padding:40px 36px;box-shadow:0 24px 60px var(--shadow);">
+    <div style="text-align:center;margin-bottom:22px">
+      <div style="font-size:48px;margin-bottom:10px">🔐</div>
+      <div style="font-size:20px;font-weight:800">Forgot Password</div>
+      <div style="font-size:13px;color:var(--text-dim);margin-top:6px">Answer your security question to reset your password.</div>
+    </div>
+    <div id="forgotPwBody"></div>
+    <div id="forgotPwErr" style="color:var(--danger);font-size:12px;text-align:center;margin-top:8px;min-height:16px"></div>
+    <div style="text-align:center;margin-top:16px">
+      <span style="font-size:12px;color:var(--text-dim);cursor:pointer" onclick="closeForgotPassword()">← Back to Login</span>
     </div>
   </div>
 </div>
@@ -985,17 +1004,90 @@ function handleEmergencyTap() {
   }
 }
 
+/* ===== FORGOT PASSWORD (Security Question) ===== */
+function showForgotPassword() {
+  document.getElementById('forgotPwScreen').style.display = 'flex';
+  document.getElementById('forgotPwErr').textContent = '';
+  document.getElementById('forgotPwBody').innerHTML =
+    '<div class="field" style="margin-bottom:12px"><label style="font-size:13px;font-weight:700;margin-bottom:6px;display:block">Username</label>'
+    +'<input id="fp_user" placeholder="Enter your username" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"></div>'
+    +'<button class="btn-login" style="width:100%;margin-top:8px" onclick="verifyForgotUser()">Next →</button>';
+}
+
+function closeForgotPassword() {
+  document.getElementById('forgotPwScreen').style.display = 'none';
+}
+
+function verifyForgotUser() {
+  var username = (document.getElementById('fp_user')?.value||'').trim().toLowerCase();
+  if (!username) { document.getElementById('forgotPwErr').textContent = 'Please enter your username.'; return; }
+  var user = USERS[username];
+  if (!user) { document.getElementById('forgotPwErr').textContent = 'Username not found.'; return; }
+  if (!user.securityQ || !user.securityA) {
+    document.getElementById('forgotPwErr').textContent = 'No security question set for this account. Contact the Owner to reset your password.';
+    return;
+  }
+  document.getElementById('forgotPwErr').textContent = '';
+  document.getElementById('forgotPwBody').innerHTML =
+    '<div style="font-size:13px;font-weight:700;margin-bottom:6px">Security Question:</div>'
+    +'<div style="font-size:13px;color:var(--accent);background:var(--accent-soft);padding:10px 14px;border-radius:9px;margin-bottom:14px">'+user.securityQ+'</div>'
+    +'<div class="field" style="margin-bottom:12px"><label style="font-size:13px;font-weight:700;margin-bottom:6px;display:block">Your Answer</label>'
+    +'<input id="fp_answer" placeholder="Type your answer" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"></div>'
+    +'<button class="btn-login" style="width:100%;margin-top:8px" onclick="verifySecurityAnswer(\''+username+'\')">Verify →</button>';
+}
+
+function verifySecurityAnswer(username) {
+  var answer = (document.getElementById('fp_answer')?.value||'').trim().toLowerCase();
+  var user = USERS[username];
+  if (!user) return;
+  if (answer !== (user.securityA||'').toLowerCase()) {
+    document.getElementById('forgotPwErr').textContent = 'Incorrect answer. Please try again.';
+    return;
+  }
+  document.getElementById('forgotPwErr').textContent = '';
+  document.getElementById('forgotPwBody').innerHTML =
+    '<div style="text-align:center;font-size:28px;margin-bottom:10px">✅</div>'
+    +'<div style="text-align:center;font-size:13px;font-weight:700;margin-bottom:14px;color:var(--success)">Identity verified!</div>'
+    +'<div class="field" style="margin-bottom:10px"><label style="font-size:13px;font-weight:700;margin-bottom:6px;display:block">New Password</label>'
+    +'<input type="password" id="fp_newpw" placeholder="Min. 6 characters" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"></div>'
+    +'<div class="field" style="margin-bottom:12px"><label style="font-size:13px;font-weight:700;margin-bottom:6px;display:block">Confirm Password</label>'
+    +'<input type="password" id="fp_conpw" placeholder="Re-enter password" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"></div>'
+    +'<button class="btn-login" style="width:100%;margin-top:8px" onclick="resetForgotPassword(\''+username+'\')">🔑 Reset Password</button>';
+}
+
+function resetForgotPassword(username) {
+  var pw = (document.getElementById('fp_newpw')?.value||'');
+  var con = (document.getElementById('fp_conpw')?.value||'');
+  if (pw.length < 6) { document.getElementById('forgotPwErr').textContent = 'Password must be at least 6 characters.'; return; }
+  if (pw !== con) { document.getElementById('forgotPwErr').textContent = 'Passwords do not match.'; return; }
+  USERS[username].password = pw;
+  USERS[username].lastPwChange = new Date().toISOString();
+  USERS[username].forceChange = false;
+  saveAccounts();
+  closeForgotPassword();
+  alert('✅ Password reset successfully!\n\nYou can now login with your new password.');
+}
+
 function isPwExpired(acc) {
   if (!acc.lastPwChange) return true;
   const days = (new Date() - new Date(acc.lastPwChange)) / (1000*60*60*24);
   return days >= 90;
 }
 
+const SECURITY_QUESTIONS = [
+  'What is the name of your first pet?',
+  'What is your mother\'s maiden name?',
+  'What city were you born in?',
+  'What was the name of your first school?',
+  'What is your favorite food?',
+  'What is the name of your best friend?'
+];
+
 const TECHNICIANS = ['Papa (Senior Tech)', 'Helper 1', 'Helper 2'];
 
 // Reference number service codes
 const SERVICE_CODES = {
-  'Aircon Cleaning – Window Type': 'AC', 'Aircon Cleaning – Split Type': 'AC',
+  'Aircon Cleaning – Window Type': 'AC', 'Aircon Cleaning – Split Type': 'AC', 'Aircon Cleaning – Mounted/Cassette': 'AC',
   'AWM Deep Cleaning': 'WM', 'Aircon Installation': 'AC', 'Aircon Relocation': 'AC',
   'Aircon Dismantle': 'AC', 'Freon Charging': 'AC', 'Breaker Installation': 'EL',
   'Aircon Bracket': 'AC', 'Electrical Work': 'EL', 'Plumbing': 'PL'
@@ -1032,7 +1124,7 @@ const UNIT_ILLUSTRATIONS = {
   general: 'data:image/jpeg;base64,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'
 };
 const DJCE_BIZ = {name:'DJ-CE Airconditioning Services',dti:'Business Name No. 5947985',bir:'TIN: ____________',address:'Caniogan, Calumpit, Bulacan, Philippines 3003',phone:'0976 259 2458',fb:'DJ-CE Aircon Cleaning Services',tagline:'We serve with quality and care!'};
-const SERVICES = ['Aircon Cleaning – Window Type','Aircon Cleaning – Split Type','AWM Deep Cleaning','Aircon Installation','Aircon Relocation','Aircon Dismantle','Freon Charging','Breaker Installation','Aircon Bracket','Electrical Work','Plumbing'];
+const SERVICES = ['Aircon Cleaning – Window Type','Aircon Cleaning – Split Type','Aircon Cleaning – Mounted/Cassette','AWM Deep Cleaning','Aircon Installation','Aircon Relocation','Aircon Dismantle','Freon Charging','Breaker Installation','Aircon Bracket','Electrical Work','Plumbing'];
 const SERVICE_AREAS = ['Calumpit','Malolos','Balagtas','Guiguinto','Bocaue','Pulilan','Plaridel','San Miguel','Apalit','Sto. Tomas','Angeles','San Fernando'];
 
 let session = null;
@@ -1043,6 +1135,24 @@ let NOTIFS = [];
 let currentReceiptBooking = null;
 let ARCHIVED_BOOKINGS = {};
 let EXPENSES = [];
+
+// Service Catalog — base prices, descriptions, categories
+const DEFAULT_SERVICE_CATALOG = {
+  'Aircon Cleaning – Window Type': {name:'Aircon Cleaning – Window Type', category:'Aircon', basePrice:400, description:'Standard cleaning of window-type aircon units including filter wash, coil cleaning, and drain check.'},
+  'Aircon Cleaning – Split Type': {name:'Aircon Cleaning – Split Type', category:'Aircon', basePrice:500, description:'Deep cleaning of split-type aircon units including indoor/outdoor unit wash, filter, and coil cleaning.'},
+  'Aircon Cleaning – Mounted/Cassette': {name:'Aircon Cleaning – Mounted/Cassette', category:'Aircon', basePrice:800, description:'Cleaning of ceiling-mounted/cassette-type aircon units. Requires ladder and special tools.'},
+  'AWM Deep Cleaning': {name:'AWM Deep Cleaning', category:'Appliance', basePrice:600, description:'Full deep cleaning of automatic washing machine — drum, filter, gasket, and detergent tray.'},
+  'Aircon Installation': {name:'Aircon Installation', category:'Aircon', basePrice:2500, description:'Complete aircon installation including bracket, piping, wiring, and testing.'},
+  'Aircon Relocation': {name:'Aircon Relocation', category:'Aircon', basePrice:2000, description:'Dismantling, transfer, and re-installation of aircon unit to a new location.'},
+  'Aircon Dismantle': {name:'Aircon Dismantle', category:'Aircon', basePrice:800, description:'Safe removal and dismantling of aircon unit. Does not include re-installation.'},
+  'Freon Charging': {name:'Freon Charging', category:'Aircon', basePrice:1500, description:'Refrigerant recharging for aircon units. R22/R32/R410A assessed on-site.'},
+  'Breaker Installation': {name:'Breaker Installation', category:'Electrical', basePrice:500, description:'Installation of circuit breaker for added electrical safety.'},
+  'Aircon Bracket': {name:'Aircon Bracket', category:'Aircon', basePrice:800, description:'Fabrication and installation of outdoor unit bracket.'},
+  'Electrical Work': {name:'Electrical Work', category:'Electrical', basePrice:0, description:'General electrical troubleshooting, wiring, and repair. Price depends on scope.'},
+  'Plumbing': {name:'Plumbing', category:'Plumbing', basePrice:0, description:'General plumbing repair, pipe fixing, and leak troubleshooting. Price depends on scope.'},
+  'Others': {name:'Others', category:'Other', basePrice:0, description:'Custom or unlisted services. Describe the service needed.'}
+};
+let SERVICE_CATALOG = {};
 let BOOKING_PHOTOS = {};
 let SCHEDULE_SLOTS = []; // { slotId, date, timeSlot, label, time, maxBookings, currentBookings, remaining, status }
 
@@ -1829,6 +1939,8 @@ function openBookingDetail(id) {
           })()}
         </span></div>
         <div class="info-row"><span class="info-label">Notes</span><span class="info-val">${b.notes||'—'}</span></div>
+        <div class="info-row"><span class="info-label">Usage</span><span class="info-val">${b.usage||'—'}</span></div>
+        <div class="info-row"><span class="info-label">Next Cleaning</span><span class="info-val">${b.nextCleaningDate?formatDate(b.nextCleaningDate):'—'}</span></div>
       </div>
     </div>
     ${session.role!=='tech'?`
@@ -1839,11 +1951,18 @@ function openBookingDetail(id) {
       </div>
       <div class="field"><label>Status</label>
         <select id="detStatus">
-          ${['Pending','Confirmed','Ongoing','Done','For Backjob','Cancelled'].map(s=>`<option ${b.status===s?'selected':''}>${s}</option>`).join('')}
+          ${['Pending','Confirmed','Ongoing','Done','For Backjob','Completed - Rebooked','Cancelled'].map(s=>`<option ${b.status===s?'selected':''}>${s}</option>`).join('')}
         </select>
       </div>
       <div class="field"><label>Notes</label>
         <input type="text" id="detNotes" value="${b.notes||''}" placeholder="Internal notes">
+      </div>
+      <div class="field"><label>Usage Frequency</label>
+        <select id="detUsage"><option value="">— Select —</option>${USAGE_OPTS.map(u=>`<option ${b.usage===u.label?'selected':''}>${u.label}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>Next Cleaning Date</label>
+        <input type="date" id="detNextClean" value="${b.nextCleaningDate||''}" onchange="" style="width:100%">
+        <div style="font-size:10px;color:var(--text-dim);margin-top:3px">${b.nextCleaningDate?'':'Select usage frequency or set manually'}</div>
       </div>
     </div>
     <div class="sec-divider" style="margin-top:12px">💰 Payment Breakdown</div>
@@ -1928,9 +2047,14 @@ function updateBooking(id) {
   const totalAmount = feeService + feeParts + feeTranspo + feeOther - feeDiscount;
   const amount      = Math.max(0, totalAmount);
 
+  const usage = document.getElementById('detUsage')?.value||'';
+  const nextClean = document.getElementById('detNextClean')?.value||'';
+
   if (tech) b.technician = tech;
   if (status) b.status = status;
   if (notes !== undefined) b.notes = notes;
+  if (usage) { b.usage = usage; if (!nextClean && b.date) b.nextCleaningDate = calcNextCleaning(b.date, usage); }
+  if (nextClean) b.nextCleaningDate = nextClean;
   // Save breakdown
   b.feeService  = feeService  || undefined;
   b.feeParts    = feeParts    || undefined;
@@ -1970,7 +2094,7 @@ function markDone(id) {
 const HP_OPTS=['0.5 HP','0.75 HP','1.0 HP','1.5 HP','2.0 HP','2.5 HP','3.0 HP','5.0 HP'];
 const AC_BRANDS=['Carrier','Kolin','Midea','Panasonic','LG','Samsung','Sharp','Fujidaire','Condura','Gree','Other'];
 const WM_BRANDS=['Samsung','LG','Whirlpool','Panasonic','Sharp','Condura','Haier','Midea','Other'];
-const WM_CAP=['5 kg','6 kg','7 kg','8 kg','9 kg','10 kg','11 kg','12 kg','13 kg+'];
+const WM_CAP=['5 kg','6 kg','7 kg','8 kg','9 kg','10 kg','11 kg','12 kg','13 kg','14 kg','15 kg','16 kg','17 kg','18 kg','19 kg','20 kg','20+ kg'];
 const FLOOR_OPTS=['Ground Floor','2nd Floor','3rd Floor','4th Floor+','Rooftop'];
 
 function getServiceFields(svc) {
@@ -1981,9 +2105,10 @@ function getServiceFields(svc) {
   const un = `<select id="nb_units"><option value="1">1 unit</option><option value="2">2 units</option><option value="3">3 units</option><option value="4">4 units</option><option value="5+">5+ units</option></select>`;
 
   if (svc.includes('Aircon Cleaning')) {
-    const isW = svc.includes('Window'), isS = svc.includes('Split');
+    const isW = svc.includes('Window'), isS = svc.includes('Split'), isM = svc.includes('Mounted') || svc.includes('Cassette');
+    const acTypeVal = isW?'Window Type':isS?'Split Type':isM?'Mounted/Cassette Type':'';
     return `<div class="sec-divider" style="margin-top:6px">Unit Details</div><div class="form-grid">
-      ${(!isW&&!isS)?`<div class="field"><label>Unit Type *</label><select id="nb_actype"><option value="">—</option><option>Window Type</option><option>Split Type</option></select></div>`:`<div class="field"><label>Unit Type</label><input value="${isW?'Window Type':'Split Type'}" readonly style="background:var(--bg-elev2)"></div>`}
+      ${acTypeVal?`<div class="field"><label>Unit Type</label><input value="${acTypeVal}" readonly style="background:var(--bg-elev2)"></div>`:`<div class="field"><label>Unit Type *</label><select id="nb_actype"><option value="">—</option><option>Window Type</option><option>Split Type</option><option>Mounted/Cassette Type</option></select></div>`}
       <div class="field"><label>HP *</label>${hp}</div>
       <div class="field"><label>Brand</label>${bac}</div>
       <div class="field"><label>No. of Units</label>${un}</div>
@@ -2046,7 +2171,7 @@ function getServiceFields(svc) {
     return `<div class="sec-divider" style="margin-top:6px">Problem Description</div>
       <div class="field"><label>Describe the issue *</label><textarea id="nb_issue" placeholder="e.g. No power sa isang room, leaking pipe, etc." style="min-height:70px"></textarea></div>`;
   }
-  if (svc === 'Other') {
+  if (svc === 'Other' || svc === 'Others') {
     return `<div class="sec-divider" style="margin-top:6px">Service Needed</div>
       <div class="field"><label>Describe the service needed *</label><textarea id="nb_issue" placeholder="Please describe what service you need..." style="min-height:70px"></textarea></div>`;
   }
@@ -2096,7 +2221,7 @@ function openNewBooking(name='',phone='',address='') {
         <select id="nb_service" onchange="updateServiceFields()">
           <option value="">— Select Service —</option>
           ${SERVICES.map(s=>`<option>${s}</option>`).join('')}
-          <option>Other</option>
+          <option>Others</option>
         </select>
       </div>
     </div>
@@ -2104,7 +2229,8 @@ function openNewBooking(name='',phone='',address='') {
     <div class="form-grid" style="margin-top:10px">
       <div class="field"><label>Preferred Date *</label><input type="date" id="nb_date" min="${new Date().toISOString().split('T')[0]}"></div>
       <div class="field"><label>Preferred Time</label>
-        <select id="nb_time"><option>Morning (8AM–12PM)</option><option>Afternoon (1PM–5PM)</option><option>Flexible</option></select>
+        <select id="nb_time" onchange="toggleCustomTime(this)"><option>Morning (8AM–12PM)</option><option>Afternoon (1PM–5PM)</option><option>Flexible</option><option value="__custom">Specific Time…</option></select>
+        <input type="time" id="nb_time_custom" style="display:none;margin-top:5px" onchange="this.dataset.set='1'">
       </div>
       <div class="field"><label>Assign Technician</label>
         <select id="nb_tech"><option value="">— To be assigned —</option>${TECHNICIANS.map(t=>`<option>${t}</option>`).join('')}</select>
@@ -2119,6 +2245,28 @@ function openNewBooking(name='',phone='',address='') {
     <button class="btn btn-outline btn-sm" onclick="closeModal('editModal')">Cancel</button>
     <button class="btn btn-gold btn-sm" onclick="saveBooking()">💾 Save Booking</button>`;
   openModal('editModal');
+}
+
+function toggleCustomTime(sel) {
+  var ci = document.getElementById('nb_time_custom');
+  if (!ci) return;
+  ci.style.display = sel.value === '__custom' ? 'block' : 'none';
+}
+function getSelectedTime() {
+  var sel = document.getElementById('nb_time');
+  if (sel && sel.value === '__custom') {
+    var ci = document.getElementById('nb_time_custom');
+    if (ci && ci.value) {
+      var parts = ci.value.split(':');
+      var h = parseInt(parts[0],10);
+      var m = parts[1]||'00';
+      var ampm = h >= 12 ? 'PM' : 'AM';
+      var h12 = h % 12 || 12;
+      return h12 + ':' + m + ' ' + ampm;
+    }
+    return 'Flexible';
+  }
+  return sel ? sel.value : '';
 }
 
 async function saveBooking() {
@@ -2139,13 +2287,21 @@ async function saveBooking() {
     email: document.getElementById('nb_email')?.value||'',
     address, landmark: document.getElementById('nb_landmark')?.value||'',
     service, serviceDetails: fields, serviceDetailsSummary: summary,
-    date, time: document.getElementById('nb_time')?.value||'',
+    date, time: getSelectedTime(),
     technician: document.getElementById('nb_tech')?.value||'',
     amount: document.getElementById('nb_amount')?.value||'',
     notes: document.getElementById('nb_notes')?.value||'',
     usage, nextCleaningDate: calcNextCleaning(date, usage),
     status:'Pending', createdAt: new Date().toISOString(), source:'manual'
   };
+  // Auto-rebook: mark old Done bookings for same client+service as "Completed - Rebooked"
+  Object.values(BOOKINGS).forEach(function(old) {
+    if (old.id !== id && old.status === 'Done' && old.name === name && old.service === service) {
+      old.status = 'Completed - Rebooked';
+      old._dirty = true;
+      syncBookingToSheets(old);
+    }
+  });
   saveLocalData();
   logActivity('➕', `New booking: ${name} — ${service}${summary?' ('+summary+')':''}`, 'booking');
   addNotif(`New booking from ${name}: ${service}`, 'info', id);
@@ -6017,6 +6173,7 @@ function saveLocalData() {
   localStorage.setItem('djce_log', JSON.stringify(ACTIVITY_LOG));
   localStorage.setItem('djce_archived', JSON.stringify(ARCHIVED_BOOKINGS));
   localStorage.setItem('djce_expenses', JSON.stringify(EXPENSES));
+  localStorage.setItem('djce_service_catalog', JSON.stringify(SERVICE_CATALOG));
   try { localStorage.setItem('djce_photos', JSON.stringify(BOOKING_PHOTOS)); } catch(e) { console.warn('Photos too large for localStorage — clearing oldest'); }
 }
 
@@ -6028,6 +6185,8 @@ function loadLocalData() {
   try { ARCHIVED_BOOKINGS = JSON.parse(localStorage.getItem('djce_archived')||'{}'); } catch(e) { ARCHIVED_BOOKINGS={}; }
   try { EXPENSES = JSON.parse(localStorage.getItem('djce_expenses')||'[]'); } catch(e) { EXPENSES=[]; }
   try { BOOKING_PHOTOS = JSON.parse(localStorage.getItem('djce_photos')||'{}'); } catch(e) { BOOKING_PHOTOS={}; }
+  try { SERVICE_CATALOG = JSON.parse(localStorage.getItem('djce_service_catalog')||'{}'); } catch(e) { SERVICE_CATALOG={}; }
+  if (!Object.keys(SERVICE_CATALOG).length) SERVICE_CATALOG = JSON.parse(JSON.stringify(DEFAULT_SERVICE_CATALOG));
   autoPurgeTrash();
 }
 
@@ -6754,6 +6913,22 @@ function renderSettings(){
           <div class="field"><label>Confirm New Password</label><input type="password" id="set_conpw" placeholder="Re-enter new password" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"></div>
         </div>
         <button class="btn btn-primary btn-sm" onclick="changeMyPassword()">🔑 Update Password</button>
+
+        <div class="sec-divider" style="margin-top:20px">Security Question</div>
+        <div style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px">Set a security question for password recovery via "Forgot Password?" on the login screen.</div>
+        ${me.securityQ ? '<div style="background:var(--success-soft);border:1px solid var(--success);border-radius:8px;padding:9px 12px;font-size:12px;margin-bottom:12px;color:var(--success)">✅ Security question is set: <strong>'+me.securityQ+'</strong></div>' : '<div style="background:var(--warning-soft);border:1px solid var(--warning);border-radius:8px;padding:9px 12px;font-size:12px;margin-bottom:12px;color:var(--warning)">⚠️ No security question set. Set one to enable "Forgot Password?" recovery.</div>'}
+        <div class="form-grid">
+          <div class="field"><label>Security Question</label>
+            <select id="set_secQ" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none">
+              <option value="">— Select a question —</option>
+              ${SECURITY_QUESTIONS.map(q=>'<option'+(me.securityQ===q?' selected':'')+'>'+q+'</option>').join('')}
+            </select>
+          </div>
+          <div class="field"><label>Your Answer</label>
+            <input type="text" id="set_secA" value="${me.securityA||''}" placeholder="Your answer (case-insensitive)" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none">
+          </div>
+        </div>
+        <button class="btn btn-gold btn-sm" onclick="saveSecurityQuestion()">🔒 Save Security Question</button>
       </div>
     </div>
 
@@ -6824,7 +6999,71 @@ function renderSettings(){
         <div>👑 Only the <strong>Owner</strong> can add/remove accounts</div>
       </div>
     </div>
+
+    ${(session.role==='owner'||session.role==='admin') ? renderServiceCatalog() : ''}
   </div>`;
+}
+
+function renderServiceCatalog() {
+  var cats = {};
+  Object.values(SERVICE_CATALOG).forEach(function(s) {
+    if (!cats[s.category]) cats[s.category] = [];
+    cats[s.category].push(s);
+  });
+  var rows = Object.values(SERVICE_CATALOG).map(function(s) {
+    return '<tr>'
+      +'<td><strong>'+s.name+'</strong></td>'
+      +'<td><span class="bc-tag" style="font-size:10px">'+(s.category||'—')+'</span></td>'
+      +'<td style="font-size:12px">'+(s.basePrice?'₱'+parseFloat(s.basePrice).toLocaleString():'<span style="color:var(--text-dim)">On-site</span>')+'</td>'
+      +'<td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(s.description||'').replace(/"/g,'&quot;')+'">'+(s.description||'—')+'</td>'
+      +'<td><button class="btn btn-primary btn-xs" onclick="editCatalogService(\''+s.name.replace(/'/g,"\\'")+'\')" title="Edit">✏️</button></td>'
+      +'</tr>';
+  }).join('');
+  return '<div class="panel">'
+    +'<div class="panel-head"><div class="panel-title">📋 Service Catalog</div></div>'
+    +'<div class="panel-body">'
+    +'<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px">Manage base prices, descriptions, and categories for each service. These are used as reference when creating bookings.</div>'
+    +'<div class="tbl-wrap"><table>'
+    +'<thead><tr><th>Service</th><th>Category</th><th>Base Price</th><th>Description</th><th></th></tr></thead>'
+    +'<tbody>'+rows+'</tbody>'
+    +'</table></div>'
+    +'</div></div>';
+}
+
+function editCatalogService(name) {
+  var s = SERVICE_CATALOG[name] || {name:name, category:'', basePrice:0, description:''};
+  document.getElementById('emTitle').textContent = 'Edit Service';
+  document.getElementById('emSub').textContent = name;
+  document.getElementById('emBody').innerHTML = '<div class="form-grid">'
+    +'<div class="field"><label>Service Name</label><input id="cs_name" value="'+s.name+'" readonly style="background:var(--bg-elev2)"></div>'
+    +'<div class="field"><label>Category</label><select id="cs_cat">'
+    +'<option value="Aircon"'+(s.category==='Aircon'?' selected':'')+'>Aircon</option>'
+    +'<option value="Appliance"'+(s.category==='Appliance'?' selected':'')+'>Appliance</option>'
+    +'<option value="Electrical"'+(s.category==='Electrical'?' selected':'')+'>Electrical</option>'
+    +'<option value="Plumbing"'+(s.category==='Plumbing'?' selected':'')+'>Plumbing</option>'
+    +'<option value="Other"'+(s.category==='Other'?' selected':'')+'>Other</option>'
+    +'</select></div>'
+    +'<div class="field"><label>Base Price (₱)</label><input type="number" id="cs_price" value="'+(s.basePrice||'')+'" min="0" step="0.01" placeholder="0.00"></div>'
+    +'<div class="field form-full"><label>Description</label><textarea id="cs_desc" placeholder="Describe what this service includes..." style="min-height:60px">'+(s.description||'')+'</textarea></div>'
+    +'</div>';
+  document.getElementById('emFoot').innerHTML =
+    '<button class="btn btn-outline btn-sm" onclick="closeModal(\'editModal\')">Cancel</button> '
+    +'<button class="btn btn-gold btn-sm" onclick="saveCatalogService()">💾 Save</button>';
+  openModal('editModal');
+}
+
+function saveCatalogService() {
+  var name = document.getElementById('cs_name').value;
+  SERVICE_CATALOG[name] = {
+    name: name,
+    category: document.getElementById('cs_cat').value,
+    basePrice: parseFloat(document.getElementById('cs_price').value)||0,
+    description: document.getElementById('cs_desc').value.trim()
+  };
+  saveLocalData();
+  closeModal('editModal');
+  renderView('settings');
+  showToast('Service catalog updated', 'success');
 }
 
 function renderAccountsManager(){
@@ -6863,10 +7102,13 @@ function buildAccRows(){
       others:'<span class="status-badge" style="background:rgba(100,116,139,.15);color:var(--muted)">👤 Others</span>'
     };
     var roleBadge = roleBadgeMap[u.role]||('<span class="status-badge">'+u.role+'</span>');
+    var hasPinSet = false;
+    try { hasPinSet = !!localStorage.getItem('djce_pin_'+u.username); } catch(e){}
     var actions = isMe
       ? '<em style="font-size:11px;color:var(--text-dim)">Current user</em>'
       : '<button class="btn btn-primary btn-xs" data-acc-edit="'+u.username+'">Edit</button> '
-        +'<button class="btn btn-outline btn-xs" data-acc-reset="'+u.username+'">Reset Pw</button>'
+        +'<button class="btn btn-outline btn-xs" data-acc-reset="'+u.username+'">Reset Pw</button> '
+        +'<button class="btn btn-outline btn-xs" data-acc-resetpin="'+u.username+'" title="'+(hasPinSet?'PIN is set — click to reset':'No PIN set')+'">'+(hasPinSet?'🔒':'🔓')+' Reset PIN</button>'
         +(!isOwnerAcc ? ' <button class="btn btn-danger btn-xs" data-acc-del="'+u.username+'">Remove</button>' : '');
     return '<tr>'
       +'<td style="font-family:monospace;font-size:12px;color:var(--accent)">@'+u.username+'</td>'
@@ -6972,6 +7214,19 @@ function saveName(){
   logActivity('✏️',session.name+' updated display name','settings');
   showToast('Display name updated!','success');
   switchView('settings');
+}
+
+function saveSecurityQuestion() {
+  var q = document.getElementById('set_secQ')?.value||'';
+  var a = (document.getElementById('set_secA')?.value||'').trim();
+  if (!q) { showToast('Please select a security question','error'); return; }
+  if (!a || a.length < 2) { showToast('Please enter an answer (at least 2 characters)','error'); return; }
+  USERS[session.username].securityQ = q;
+  USERS[session.username].securityA = a;
+  saveAccounts();
+  logActivity('🔒', session.name + ' updated security question', 'settings');
+  showToast('Security question saved!','success');
+  renderView('settings');
 }
 
 function changeMyPassword(){
@@ -7113,14 +7368,26 @@ function closeUserMenu() {
 
 // Global event delegation for dynamic buttons
 document.addEventListener('click', function(e){
-  var el = e.target.closest('[data-acc-edit],[data-acc-reset],[data-acc-del],[data-close-modal],[data-save-edit]');
+  var el = e.target.closest('[data-acc-edit],[data-acc-reset],[data-acc-del],[data-acc-resetpin],[data-close-modal],[data-save-edit]');
   if(!el) return;
   if(el.dataset.accEdit) openEditAccount(el.dataset.accEdit);
   if(el.dataset.accReset) forceReset(el.dataset.accReset);
   if(el.dataset.accDel) removeAccount(el.dataset.accDel);
+  if(el.dataset.accResetpin) resetUserPin(el.dataset.accResetpin);
   if(el.dataset.closeModal) closeModal(el.dataset.closeModal);
   if(el.dataset.saveEdit) saveEditAccount(el.dataset.saveEdit);
 });
+
+/* ── Reset PIN (admin action) ── */
+function resetUserPin(username) {
+  var hasPin = false;
+  try { hasPin = !!localStorage.getItem('djce_pin_'+username); } catch(e){}
+  if (!hasPin) { showToast('No PIN set for '+username,'info'); return; }
+  if (!confirm('Reset PIN lock for "'+username+'"? They will need to set up a new PIN.')) return;
+  try { localStorage.removeItem('djce_pin_'+username); } catch(e){}
+  showToast('PIN reset for '+username,'success');
+  renderAccountsManager();
+}
 
 /* ===========================
    PIN LOCK SYSTEM
