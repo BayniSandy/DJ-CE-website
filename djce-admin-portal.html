@@ -1941,6 +1941,7 @@ function openBookingDetail(id) {
         <div class="info-row"><span class="info-label">Notes</span><span class="info-val">${b.notes||'—'}</span></div>
         <div class="info-row"><span class="info-label">Usage</span><span class="info-val">${b.usage||'—'}</span></div>
         <div class="info-row"><span class="info-label">Next Cleaning</span><span class="info-val">${b.nextCleaningDate?formatDate(b.nextCleaningDate):'—'}</span></div>
+        <div class="info-row"><span class="info-label">Follow-up</span><span class="info-val">${b.followedUp==='email-sent'?'<span style="color:var(--success);font-weight:600">✅ Reminder Sent</span>':b.followedUp||'<span style="color:var(--text-dim)">Not yet</span>'} ${b.email && b.nextCleaningDate && session.role!=='tech'?'<button class="btn btn-outline btn-xs" style="margin-left:8px;font-size:11px" onclick="sendBookingReminder(\''+b.id+'\')">📧 Send Reminder</button>':''}</span></div>
       </div>
     </div>
     ${session.role!=='tech'?`
@@ -2030,6 +2031,23 @@ function calcPaymentTotal() {
   const hiddenEl = document.getElementById('detAmount');
   if (totalEl) totalEl.textContent = '₱'+Math.max(0,total).toLocaleString();
   if (hiddenEl) hiddenEl.value = Math.max(0,total);
+}
+
+async function sendBookingReminder(id) {
+  var b = BOOKINGS[id];
+  if (!b) { showToast('Booking not found','error'); return; }
+  if (!b.email) { showToast('No email address for this client','error'); return; }
+  if (!confirm('Send service reminder email to '+b.name+' ('+b.email+')?')) return;
+  showToast('Sending reminder…','info');
+  var res = await callSheets({action:'sendReminder', id:id});
+  if (res.ok) {
+    b.followedUp = 'email-sent';
+    saveLocalData();
+    showToast('Reminder sent to '+b.email,'success');
+    openBookingDetail(id);
+  } else {
+    showToast(res.error||'Failed to send','error');
+  }
 }
 
 function updateBooking(id) {
@@ -6265,7 +6283,7 @@ async function fetchFromSheets() {
           nextCleaningDate: (b.nextCleaningDate || '').trim(),
           notes: (b.notes || '').trim(),
           source: (b.source || 'website').trim(),
-          followedUp: (b.followedUp || 'false').trim(),
+          followedUp: (b.followedUp || '').trim(),
           completedAt: (b.completedAt || '').trim(),
           createdAt: (b.createdAt || '').trim(),
           _synced: true

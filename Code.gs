@@ -139,6 +139,7 @@ function doGet(e) {
         case 'getInvestors':        result = getInvestors();              break;
         case 'saveInvestor':        result = saveInvestor(params);        break;
         case 'deleteInvestor':      result = deleteInvestor(params);      break;
+        case 'sendReminder':        result = sendManualReminder(params);  break;
         default: result = { ok: false, error: 'Unknown action: ' + action };
       }
     }
@@ -1342,4 +1343,187 @@ function uploadPhotoToDrive(body) {
     photoType: photoType,
     fileName: safeName
   };
+}
+
+/* ─── SERVICE DUE REMINDERS (Time-Driven Trigger) ────────── */
+/**
+ * Run daily via Apps Script trigger (Edit → Triggers → Add → checkServiceReminders → Day timer → 8-9 AM).
+ * Scans bookings with nextCleaningDate ≤ 14 days from now, sends email reminders to clients,
+ * and sends a summary digest to admin.
+ */
+function checkServiceReminders() {
+  var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('Bookings');
+  if (!sheet) return;
+  var data = sheet.getDataRange().getValues();
+  if (data.length < 2) return;
+  var headers = data[0];
+  var colMap = {};
+  for (var j = 0; j < headers.length; j++) colMap[headerToKey(headers[j])] = j;
+
+  var today = new Date();
+  today.setHours(0,0,0,0);
+  var in14 = new Date(today.getTime() + 14 * 86400000);
+  var reminded = [];
+  var overdue = [];
+
+  for (var i = 1; i < data.length; i++) {
+    var status = cellToString(data[i][colMap['status']]);
+    if (status === 'Cancelled' || status === 'Deleted') continue;
+    var ncd = cellToString(data[i][colMap['nextCleaningDate']]);
+    if (!ncd) continue;
+    var ncdDate = new Date(ncd + 'T00:00:00');
+    if (isNaN(ncdDate.getTime())) continue;
+    ncdDate.setHours(0,0,0,0);
+    var diffDays = Math.round((ncdDate - today) / 86400000);
+    var followedUp = cellToString(data[i][colMap['followedUp']]);
+    var name = cellToString(data[i][colMap['name']]);
+    var email = cellToString(data[i][colMap['email']]);
+    var phone = cellToString(data[i][colMap['phone']]);
+    var service = cellToString(data[i][colMap['service']]);
+    var bookingId = cellToString(data[i][colMap['bookingId']]);
+    var refNo = cellToString(data[i][colMap['refNo']]) || bookingId;
+
+    // Overdue: past nextCleaningDate
+    if (diffDays < 0) {
+      overdue.push({ name: name, phone: phone, service: service, ncd: ncd, refNo: refNo, days: Math.abs(diffDays) });
+    }
+
+    // Send reminder: within 14 days AND not already followed up with email
+    if (diffDays >= 0 && diffDays <= 14 && email && followedUp !== 'email-sent') {
+      try {
+        sendServiceReminderEmail(email, name, service, ncd, refNo, diffDays);
+        // Mark as followed up
+        sheet.getRange(i + 1, colMap['followedUp'] + 1).setValue('email-sent');
+        reminded.push({ name: name, service: service, ncd: ncd, refNo: refNo, days: diffDays });
+      } catch(e) {}
+    }
+  }
+
+  // Send admin digest
+  if (reminded.length || overdue.length) {
+    sendAdminReminderDigest(reminded, overdue);
+  }
+}
+
+/**
+ * Reminder email to client — "Your aircon service is due soon!"
+ */
+function sendServiceReminderEmail(email, name, service, ncd, refNo, daysUntil) {
+  var dateStr = Utilities.formatDate(new Date(ncd), TIMEZONE, 'MMMM d, yyyy');
+  var urgency = daysUntil <= 3 ? '🔴' : daysUntil <= 7 ? '🟡' : '🟢';
+  var dueText = daysUntil === 0 ? 'today!' : 'in ' + daysUntil + ' day' + (daysUntil>1?'s':'') + '!';
+
+  var body = [
+    '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">',
+    '<div style="background:#0d1f3c;padding:24px 30px;text-align:center">',
+    '<div style="font-size:26px;font-weight:900;color:#fff">DJ-<span style="color:#f59e0b">CE</span></div>',
+    '<div style="font-size:11px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:2px;margin-top:4px">Aircon & Electrical Services</div></div>',
+
+    '<div style="background:#fef3c7;padding:16px 30px;text-align:center">',
+    '<div style="font-size:24px">' + urgency + '</div>',
+    '<div style="font-size:14px;font-weight:700;color:#92400e">Your next service is due ' + dueText + '</div></div>',
+
+    '<div style="padding:24px 30px">',
+    '<p style="font-size:15px;color:#1a1a2e;margin:0">Hi <strong>' + (name ? name.split(' ')[0] : 'there') + '</strong>! 👋</p>',
+    '<p style="font-size:13.5px;color:#475569;margin:10px 0 20px;line-height:1.6">',
+    'This is a friendly reminder that your <strong>' + (service||'aircon service') + '</strong> maintenance is coming up. Regular cleaning keeps your unit running efficiently and extends its lifespan!</p>',
+
+    '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:16px;margin-bottom:20px">',
+    '<table style="width:100%;font-size:13.5px;border-collapse:collapse">',
+    '<tr><td style="padding:6px 0;color:#6b7280;width:120px">Reference</td><td style="font-weight:700;color:#0d1f3c;font-family:monospace">' + refNo + '</td></tr>',
+    '<tr><td style="padding:6px 0;color:#6b7280">Service</td><td style="font-weight:600">' + (service||'—') + '</td></tr>',
+    '<tr><td style="padding:6px 0;color:#6b7280">Recommended Date</td><td style="font-weight:700;color:#065f46">' + dateStr + '</td></tr>',
+    '</table></div>',
+
+    '<div style="text-align:center;margin:20px 0">',
+    '<a href="tel:+63' + BUSINESS_PHONE.replace(/\D/g,'').replace(/^0/,'') + '" style="display:inline-block;background:#0d1f3c;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px">📞 Book Now — ' + BUSINESS_PHONE + '</a>',
+    '</div>',
+    '<p style="font-size:12px;color:#94a3b8;text-align:center;margin-top:10px">You can also reply to this email or message us on Facebook!</p>',
+    '</div>',
+
+    '<div style="background:#0d1f3c;padding:14px 30px;text-align:center">',
+    '<div style="color:rgba(255,255,255,.6);font-size:11px">' + BUSINESS_NAME + ' · ' + BUSINESS_ADDRESS + '</div></div>',
+    '</div>'
+  ].join('');
+
+  MailApp.sendEmail({
+    to: email,
+    subject: urgency + ' Service Reminder — ' + (service||'Maintenance') + ' due ' + dueText + ' | ' + BUSINESS_NAME,
+    htmlBody: body,
+    replyTo: NOTIF_EMAIL
+  });
+}
+
+/**
+ * Admin digest — summary of reminders sent + overdue bookings
+ */
+function sendAdminReminderDigest(reminded, overdue) {
+  var rows = '';
+  if (reminded.length) {
+    rows += '<div style="margin-bottom:20px"><h3 style="color:#065f46;font-size:14px;margin:0 0 10px">✅ Reminders Sent Today (' + reminded.length + ')</h3>';
+    rows += '<table style="width:100%;border-collapse:collapse;font-size:13px">';
+    rows += '<tr style="background:#f0fdf4"><th style="padding:8px;text-align:left;border-bottom:1px solid #ddd">Client</th><th style="padding:8px;text-align:left;border-bottom:1px solid #ddd">Service</th><th style="padding:8px;text-align:left;border-bottom:1px solid #ddd">Due Date</th><th style="padding:8px;text-align:left;border-bottom:1px solid #ddd">Days Left</th></tr>';
+    reminded.forEach(function(r) {
+      rows += '<tr><td style="padding:6px 8px;border-bottom:1px solid #eee">' + r.name + '</td><td style="padding:6px 8px;border-bottom:1px solid #eee">' + r.service + '</td><td style="padding:6px 8px;border-bottom:1px solid #eee">' + r.ncd + '</td><td style="padding:6px 8px;border-bottom:1px solid #eee">' + r.days + ' days</td></tr>';
+    });
+    rows += '</table></div>';
+  }
+  if (overdue.length) {
+    rows += '<div><h3 style="color:#dc2626;font-size:14px;margin:0 0 10px">🔴 Overdue — Needs Follow-up (' + overdue.length + ')</h3>';
+    rows += '<table style="width:100%;border-collapse:collapse;font-size:13px">';
+    rows += '<tr style="background:#fef2f2"><th style="padding:8px;text-align:left;border-bottom:1px solid #ddd">Client</th><th style="padding:8px;text-align:left;border-bottom:1px solid #ddd">Phone</th><th style="padding:8px;text-align:left;border-bottom:1px solid #ddd">Service</th><th style="padding:8px;text-align:left;border-bottom:1px solid #ddd">Due Date</th><th style="padding:8px;text-align:left;border-bottom:1px solid #ddd">Overdue</th></tr>';
+    overdue.forEach(function(o) {
+      rows += '<tr><td style="padding:6px 8px;border-bottom:1px solid #eee">' + o.name + '</td><td style="padding:6px 8px;border-bottom:1px solid #eee">' + o.phone + '</td><td style="padding:6px 8px;border-bottom:1px solid #eee">' + o.service + '</td><td style="padding:6px 8px;border-bottom:1px solid #eee">' + o.ncd + '</td><td style="padding:6px 8px;border-bottom:1px solid #eee;color:#dc2626;font-weight:700">' + o.days + ' days</td></tr>';
+    });
+    rows += '</table></div>';
+  }
+
+  var body = [
+    '<div style="font-family:Arial,sans-serif;max-width:650px;margin:0 auto">',
+    '<div style="background:#0d1f3c;color:#fff;padding:18px 24px;border-radius:10px 10px 0 0">',
+    '<h2 style="margin:0;font-size:16px">📋 DJ-CE Daily Service Reminder Digest</h2>',
+    '<p style="margin:4px 0 0;opacity:.7;font-size:12px">' + Utilities.formatDate(new Date(), TIMEZONE, 'EEEE, MMMM d, yyyy') + '</p></div>',
+    '<div style="padding:20px 24px;background:#fff;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 10px 10px">',
+    rows,
+    '</div></div>'
+  ].join('');
+
+  MailApp.sendEmail({
+    to: NOTIF_EMAIL,
+    subject: '📋 Service Reminders: ' + reminded.length + ' sent, ' + overdue.length + ' overdue | ' + Utilities.formatDate(new Date(), TIMEZONE, 'MMM d'),
+    htmlBody: body
+  });
+}
+
+/**
+ * Manual reminder — called from portal via JSONP: action=sendReminder&id=BK-xxx
+ */
+function sendManualReminder(p) {
+  var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('Bookings');
+  if (!sheet) return { ok: false, error: 'No Bookings sheet' };
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var colMap = {};
+  for (var j = 0; j < headers.length; j++) colMap[headerToKey(headers[j])] = j;
+  var idCol = colMap['bookingId'];
+  for (var i = 1; i < data.length; i++) {
+    if (cellToString(data[i][idCol]) === p.id) {
+      var email = cellToString(data[i][colMap['email']]);
+      if (!email) return { ok: false, error: 'No email for this client' };
+      var name = cellToString(data[i][colMap['name']]);
+      var service = cellToString(data[i][colMap['service']]);
+      var ncd = cellToString(data[i][colMap['nextCleaningDate']]);
+      var refNo = cellToString(data[i][colMap['refNo']]) || p.id;
+      var daysUntil = 0;
+      if (ncd) {
+        var ncdD = new Date(ncd + 'T00:00:00');
+        var now = new Date(); now.setHours(0,0,0,0);
+        daysUntil = Math.max(0, Math.round((ncdD - now) / 86400000));
+      }
+      sendServiceReminderEmail(email, name, service, ncd || '', refNo, daysUntil);
+      sheet.getRange(i + 1, colMap['followedUp'] + 1).setValue('email-sent');
+      return { ok: true, action: 'reminderSent', name: name };
+    }
+  }
+  return { ok: false, error: 'Booking not found' };
 }
