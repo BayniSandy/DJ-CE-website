@@ -140,6 +140,8 @@ function doGet(e) {
         case 'saveInvestor':        result = saveInvestor(params);        break;
         case 'deleteInvestor':      result = deleteInvestor(params);      break;
         case 'sendReminder':        result = sendManualReminder(params);  break;
+        case 'getSheetHeaders':     result = getSheetHeaders(params);     break;
+        case 'fixBookingHeaders':   result = fixBookingHeaders();         break;
         default: result = { ok: false, error: 'Unknown action: ' + action };
       }
     }
@@ -1244,6 +1246,101 @@ function getOrCreateSheet(name) {
 function setCellByKey(sheet, rowNum, colMap, key, value) {
   var col = colMap[key];
   if (col) sheet.getRange(rowNum, col).setValue(value);
+}
+
+/* ─── SHEET HEADER DIAGNOSTICS & FIX ─────────────────────── */
+function getSheetHeaders(p) {
+  var name = p && p.sheet ? p.sheet : 'Bookings';
+  var sheet = getOrCreateSheet(name);
+  if (sheet.getLastRow() === 0) return { ok: true, headers: [], note: 'Sheet is empty' };
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var expected = HEADERS[name] || [];
+  var match = true;
+  if (headers.length !== expected.length) {
+    match = false;
+  } else {
+    for (var i = 0; i < expected.length; i++) {
+      if (String(headers[i]).trim() !== String(expected[i]).trim()) { match = false; break; }
+    }
+  }
+  return { ok: true, sheet: name, actual: headers, expected: expected, match: match };
+}
+
+function fixBookingHeaders() {
+  var sheet = getOrCreateSheet('Bookings');
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(HEADERS.Bookings);
+    return { ok: true, note: 'Empty sheet — headers written', headers: HEADERS.Bookings };
+  }
+  var lastCol = sheet.getLastColumn();
+  var actualHeaders = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h){ return String(h).trim(); });
+  var expected = HEADERS.Bookings;
+
+  // Check if already matching
+  var match = true;
+  if (actualHeaders.length === expected.length) {
+    for (var i = 0; i < expected.length; i++) {
+      if (actualHeaders[i] !== expected[i]) { match = false; break; }
+    }
+  } else {
+    match = false;
+  }
+  if (match) return { ok: true, note: 'Headers already correct', headers: expected };
+
+  // Build mapping: for each expected header, find its actual column index
+  var colMap = {}; // expectedIndex → actualIndex
+  var unmapped = [];
+  for (var ei = 0; ei < expected.length; ei++) {
+    var found = -1;
+    for (var ai = 0; ai < actualHeaders.length; ai++) {
+      if (actualHeaders[ai] === expected[ei]) { found = ai; break; }
+    }
+    if (found >= 0) {
+      colMap[ei] = found;
+    } else {
+      unmapped.push(expected[ei]);
+    }
+  }
+
+  // If too many unmapped, don't risk reorder — just fix headers row
+  if (unmapped.length > 10) {
+    // Too many missing headers — just overwrite row 1 and warn
+    sheet.getRange(1, 1, 1, expected.length).setValues([expected]);
+    return { ok: true, note: 'Headers overwritten (many missing — data may still be misaligned)', fixed: expected, unmapped: unmapped };
+  }
+
+  // Reorder all data rows to match expected header order
+  var lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    var allData = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+    var reordered = allData.map(function(row) {
+      var newRow = [];
+      for (var ei = 0; ei < expected.length; ei++) {
+        if (colMap[ei] !== undefined && colMap[ei] < row.length) {
+          newRow.push(row[colMap[ei]]);
+        } else {
+          newRow.push(''); // unmapped column gets empty
+        }
+      }
+      return newRow;
+    });
+
+    // Clear old data area and write reordered
+    sheet.getRange(1, 1, lastRow, lastCol).clear();
+    sheet.getRange(1, 1, 1, expected.length).setValues([expected]);
+    if (reordered.length > 0) {
+      sheet.getRange(2, 1, reordered.length, expected.length).setValues(reordered);
+    }
+    // Re-style header row
+    var style = SHEET_STYLES['Bookings'] || { bg: '#1e3a5f', fg: '#ffffff' };
+    var hr = sheet.getRange(1, 1, 1, expected.length);
+    hr.setBackground(style.bg).setFontColor(style.fg).setFontWeight('bold');
+    sheet.setFrozenRows(1);
+  } else {
+    sheet.getRange(1, 1, 1, expected.length).setValues([expected]);
+  }
+
+  return { ok: true, note: 'Headers fixed and data reordered', fixed: expected, unmapped: unmapped, rowsReordered: lastRow - 1 };
 }
 
 function headerToKey(header) {

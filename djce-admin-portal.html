@@ -1354,6 +1354,7 @@ function handleLogout() {
     '🚪',
     function() {
       try { logActivity('🚪', session.name + ' logged out', 'logout'); } catch(e) {}
+      stopAutoSync();
       session = null;
       localStorage.removeItem('djce_session');
       document.body.classList.remove('portal-active');
@@ -1376,6 +1377,7 @@ function showPortal() {
   loadAcctData();
   switchView('dashboard');
   fetchFromSheets();
+  startAutoSync();
   // PIN: if PIN is set, lock immediately on load; if not, ask to set one
   startActivityListeners();
   setTimeout(function(){
@@ -7322,6 +7324,19 @@ async function fetchFromSheets() {
   if (btn) btn.textContent = '⟳ Syncing...';
 
   try {
+    // 0. Auto-fix sheet headers once per session
+    if (!window._headersFixed) {
+      try {
+        var fixRes = await callSheets({ action: 'fixBookingHeaders' });
+        if (fixRes && fixRes.ok) {
+          window._headersFixed = true;
+          if (fixRes.note && fixRes.note.indexOf('fixed') >= 0) {
+            console.log('Sheet headers fixed:', fixRes);
+          }
+        }
+      } catch(hErr) { console.log('Header fix skipped:', hErr); }
+    }
+
     // 1. Bookings
     const bkData = await callSheets({ action: 'getBookings' });
     if (bkData && bkData.ok && bkData.bookings) {
@@ -7504,6 +7519,89 @@ async function fetchFromSheets() {
 }
 
 async function manualSync() { await fetchFromSheets(); }
+
+/* ===========================
+   AUTO-SYNC POLLING
+=========================== */
+var _autoSyncTimer = null;
+var _autoSyncBusy = false;
+
+function startAutoSync() {
+  stopAutoSync();
+  _autoSyncTimer = setInterval(autoSyncCheck, 90000); // every 90 seconds
+}
+
+function stopAutoSync() {
+  if (_autoSyncTimer) { clearInterval(_autoSyncTimer); _autoSyncTimer = null; }
+}
+
+async function autoSyncCheck() {
+  if (_autoSyncBusy) return;
+  _autoSyncBusy = true;
+  try {
+    var oldIds = new Set(Object.keys(BOOKINGS));
+    var bkData = await callSheets({ action: 'getBookings' });
+    if (bkData && bkData.ok && bkData.bookings) {
+      var newCount = 0;
+      bkData.bookings.forEach(function(b) {
+        var id = (b.bookingId || b.id || '').trim();
+        if (!id) return;
+        if (!oldIds.has(id) && !BOOKINGS[id]) {
+          // Normalize same as fetchFromSheets
+          var normalized = {
+            id: id,
+            refNo: (b.refNo || '').trim(),
+            name: (b.name || '').trim(),
+            phone: (b.phone || '').trim(),
+            email: (b.email || '').trim(),
+            houseNo: (b.houseNo || '').trim(),
+            street: (b.street || '').trim(),
+            barangay: (b.barangay || '').trim(),
+            city: (b.city || '').trim(),
+            address: (b.fullAddress || b.address || '').trim(),
+            landmark: (b.landmark || '').trim(),
+            lat: (b.lat || '').trim(),
+            lng: (b.lng || '').trim(),
+            service: (b.service || b.services || '').trim(),
+            serviceDetails: (b.serviceDetails || '').trim(),
+            date: (b.date || '').toString().substring(0,10).trim(),
+            time: (b.timeSlot || b.time || '').trim(),
+            technician: (b.technician || b.assignedTo || b.assigned || '').trim(),
+            status: (b.status || 'Pending').trim(),
+            amount: (b.amount || '').trim(),
+            feeService: (b.feeService || '').trim(),
+            feeParts: (b.feeParts || '').trim(),
+            feeTranspo: (b.feeTranspo || '').trim(),
+            feeOther: (b.feeOther || '').trim(),
+            feeDiscount: (b.feeDiscount || '').trim(),
+            usage: (b.usageFrequency || b.usage || '').trim(),
+            nextCleaningDate: (b.nextCleaningDate || '').trim(),
+            notes: (b.notes || '').trim(),
+            source: (b.source || 'website').trim(),
+            followedUp: (b.followedUp || '').trim(),
+            completedAt: (b.completedAt || '').trim(),
+            createdAt: (b.createdAt || '').trim(),
+            _synced: true
+          };
+          BOOKINGS[id] = normalized;
+          newCount++;
+        }
+      });
+      if (newCount > 0) {
+        saveLocalData();
+        updateNavBadges();
+        var active = document.querySelector('.view.active');
+        if (active) { var n = active.id.replace('view-',''); active.innerHTML = renderView(n); }
+        showToast('📬 ' + newCount + ' new booking' + (newCount > 1 ? 's' : '') + ' from website!', 'info');
+        // Vibrate if supported
+        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      }
+    }
+  } catch(e) {
+    console.log('Auto-sync check failed:', e);
+  }
+  _autoSyncBusy = false;
+}
 
 /* ===========================
    REFERENCE NUMBER SYSTEM
