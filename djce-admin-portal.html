@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="DJ-CE Portal">
+<link rel="manifest" href="manifest.json">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.7.0/jspdf.plugin.autotable.min.js"></script>
@@ -1162,11 +1163,22 @@ let ACCT_DAILY_LOG = []; // { id, date, employeeId, jobsDone, classification:'ha
 let ACCT_PAYROLL = [];   // { id, period, employeeId, daysWorked, halfDays, fullDays, otDays, gross, deductions, net, status:'draft'|'released' }
 let ACCT_INVESTORS = []; // { id, name, percentage, notes }
 let ACCT_13TH_MONTH = []; // { id, employeeId, year, monthly:[], total, status:'accumulating'|'released' }
+let ACCT_TARGETS = {};   // { '2026-01': { target: 50000, notes: '' }, ... } keyed by YYYY-MM
 let _acctTab = 'employees'; // current accounting sub-tab
 
 // Unit Sales module data (localStorage)
 let UNIT_PRODUCTS = [];  // { id, brand, model, type, hp, price, stock, notes }
 let UNIT_SALES = [];     // { id, date, productId, qty, unitPrice, totalPrice, buyer, phone, notes, soldBy }
+
+// Phase 4 data
+let COMM_LOG = [];       // { id, bookingId, clientName, type:'call'|'text'|'email'|'fb', direction:'in'|'out', summary, date, by }
+let INVENTORY = [];      // { id, name, category, qty, unit, minStock, cost, notes }
+let FEEDBACK = [];       // { id, bookingId, clientName, rating, comment, date }
+let WARRANTY_LOG = [];   // { id, bookingId, clientName, service, warrantyDays, startDate, endDate, notes }
+var _loginAttempts = 0;
+var _loginLockUntil = 0;
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOGIN_LOCK_MINS = 15;
 
 /* ===========================
    INIT / THEME
@@ -1266,6 +1278,14 @@ function togglePwVis() {
 /* ===========================
    AUTH
 =========================== */
+function validateStrongPassword(pw) {
+  if (!pw || pw.length < 8) return 'Password must be at least 8 characters.';
+  if (!/[A-Z]/.test(pw)) return 'Must include at least 1 uppercase letter.';
+  if (!/[a-z]/.test(pw)) return 'Must include at least 1 lowercase letter.';
+  if (!/[0-9]/.test(pw)) return 'Must include at least 1 number.';
+  return '';
+}
+
 function handleLogin() {
   const u = document.getElementById('username').value.trim().toLowerCase();
   const p = document.getElementById('password').value;
@@ -1274,13 +1294,29 @@ function handleLogin() {
 
   if (!u || !p) { showErr('Please enter your username and password.'); return; }
 
+  // Login attempt limiter
+  if (_loginLockUntil && Date.now() < _loginLockUntil) {
+    var minsLeft = Math.ceil((_loginLockUntil - Date.now()) / 60000);
+    showErr('Too many failed attempts. Try again in ' + minsLeft + ' min.');
+    return;
+  }
+
   const user = USERS[u];
   if (!user || user.password !== p) {
-    showErr('Invalid username or password.');
-    // Clear saved if wrong
+    _loginAttempts++;
+    var remain = MAX_LOGIN_ATTEMPTS - _loginAttempts;
+    if (_loginAttempts >= MAX_LOGIN_ATTEMPTS) {
+      _loginLockUntil = Date.now() + LOGIN_LOCK_MINS * 60000;
+      _loginAttempts = 0;
+      showErr('Account locked for ' + LOGIN_LOCK_MINS + ' minutes due to too many failed attempts.');
+    } else {
+      showErr('Invalid username or password. ' + remain + ' attempt' + (remain>1?'s':'') + ' left.');
+    }
     if (!remember) localStorage.removeItem('djce_remember');
     return;
   }
+  _loginAttempts = 0;
+  _loginLockUntil = 0;
 
   // Save or clear remembered credentials
   if (remember) {
@@ -1901,6 +1937,62 @@ function filterBookings() {
 }
 
 /* ===========================
+   CUSTOMER FEEDBACK (Phase 4 #20)
+=========================== */
+function openFeedbackForm(bookingId) {
+  var b = BOOKINGS[bookingId];
+  if (!b) return;
+  var stars = '';
+  for (var i=1; i<=5; i++) {
+    stars += '<span class="fb-star" data-val="'+i+'" onclick="setFeedbackStar('+i+')" style="font-size:28px;cursor:pointer;padding:2px 4px;opacity:0.3">⭐</span>';
+  }
+  var html = '<div style="text-align:center;margin-bottom:16px">'
+    +'<div style="font-size:14px;font-weight:700">'+b.name+'</div>'
+    +'<div style="font-size:12px;color:var(--text-dim)">'+b.service+' · '+formatDate(b.date)+'</div>'
+    +'</div>'
+    +'<div style="text-align:center;margin-bottom:16px">'
+    +'<div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">How was the service?</div>'
+    +'<div id="fbStars">'+stars+'</div>'
+    +'<input type="hidden" id="fb_rating" value="0">'
+    +'</div>'
+    +'<div class="field"><label>Comments (optional)</label>'
+    +'<textarea id="fb_comment" placeholder="Any feedback or suggestions..." style="min-height:60px"></textarea></div>';
+  document.getElementById('expModalTitle').textContent = '⭐ Customer Feedback';
+  document.getElementById('expModalBody').innerHTML = html;
+  document.getElementById('expModalFoot').innerHTML =
+    '<button class="btn btn-outline btn-sm" onclick="closeModal(\'expenseModal\')">Cancel</button>'
+    +'<button class="btn btn-gold btn-sm" onclick="saveFeedback(\''+bookingId+'\')">💾 Save Feedback</button>';
+  openModal('expenseModal');
+}
+
+function setFeedbackStar(val) {
+  document.getElementById('fb_rating').value = val;
+  document.querySelectorAll('.fb-star').forEach(function(s){
+    s.style.opacity = parseInt(s.dataset.val) <= val ? '1' : '0.3';
+  });
+}
+
+function saveFeedback(bookingId) {
+  var rating = parseInt(document.getElementById('fb_rating').value)||0;
+  if (!rating) { showToast('Please select a star rating','warning'); return; }
+  var b = BOOKINGS[bookingId];
+  FEEDBACK.push({
+    id: 'FB-'+Date.now(),
+    bookingId: bookingId,
+    clientName: b ? b.name : '',
+    rating: rating,
+    comment: (document.getElementById('fb_comment').value||'').trim(),
+    date: new Date().toISOString(),
+    recordedBy: session.name
+  });
+  saveLocalData();
+  closeModal('expenseModal');
+  openBookingDetail(bookingId);
+  showToast('Feedback recorded — '+rating+'/5 stars','success');
+  logActivity('⭐','Feedback recorded for '+bookingId+': '+rating+'/5','feedback');
+}
+
+/* ===========================
    BOOKING DETAIL
 =========================== */
 function openBookingDetail(id) {
@@ -1942,6 +2034,17 @@ function openBookingDetail(id) {
         <div class="info-row"><span class="info-label">Usage</span><span class="info-val">${b.usage||'—'}</span></div>
         <div class="info-row"><span class="info-label">Next Cleaning</span><span class="info-val">${b.nextCleaningDate?formatDate(b.nextCleaningDate):'—'}</span></div>
         <div class="info-row"><span class="info-label">Follow-up</span><span class="info-val">${b.followedUp==='email-sent'?'<span style="color:var(--success);font-weight:600">✅ Reminder Sent</span>':b.followedUp||'<span style="color:var(--text-dim)">Not yet</span>'} ${b.email && b.nextCleaningDate && session.role!=='tech'?'<button class="btn btn-outline btn-xs" style="margin-left:8px;font-size:11px" onclick="sendBookingReminder(\''+b.id+'\')">📧 Send Reminder</button>':''}</span></div>
+        ${(function(){
+          var fb = FEEDBACK.find(function(f){return f.bookingId===b.id;});
+          if (fb) {
+            var stars = '';
+            for(var i=1;i<=5;i++) stars += i<=fb.rating?'⭐':'☆';
+            return '<div class="info-row"><span class="info-label">Feedback</span><span class="info-val"><span style="font-size:16px">'+stars+'</span> <span style="color:var(--text-dim);font-size:12px">('+fb.rating+'/5)</span>'+(fb.comment?'<div style="font-size:12px;margin-top:4px;color:var(--text-dim)">💬 '+fb.comment+'</div>':'')+'</span></div>';
+          } else if (b.status==='Done') {
+            return '<div class="info-row"><span class="info-label">Feedback</span><span class="info-val"><button class="btn btn-outline btn-xs" onclick="openFeedbackForm(\''+b.id+'\')">⭐ Add Rating</button></span></div>';
+          }
+          return '';
+        })()}
       </div>
     </div>
     ${session.role!=='tech'?`
@@ -2011,6 +2114,7 @@ function openBookingDetail(id) {
       ${canDelete?`<button class="btn btn-outline btn-sm" onclick="archiveBookingDirect('${id}')">📦 Archive</button>`:''}
       ${canDelete?`<button class="btn btn-danger btn-sm" onclick="softDeleteBooking('${id}')">🗑️ Delete</button>`:''}
       <button class="btn btn-outline btn-sm" onclick="generateQuotationPDF('${id}')">📋 Quotation</button>
+      <button class="btn btn-outline btn-sm" onclick="generateServiceAgreement('${id}')">📄 Contract</button>
       <button class="btn btn-gold btn-sm" onclick="openReceiptModal('${id}')">🧾 Receipt</button>
       <button class="btn btn-primary btn-sm" onclick="updateBooking('${id}')">💾 Save Changes</button>`;
   } else {
@@ -2505,17 +2609,69 @@ function renderBookingCard(b) {
 function renderMyJobs() {
   const myJobs = Object.values(BOOKINGS).filter(b=>b.technician===session.name).sort((a,b)=>new Date(a.date)-new Date(b.date));
   const active = myJobs.filter(b=>b.status!=='Done'&&b.status!=='Cancelled');
+  const today = new Date().toISOString().split('T')[0];
+  const todayJobs = active.filter(b=>b.date===today);
+  const upcoming = active.filter(b=>b.date>today);
+  const past = active.filter(b=>b.date<today);
   const done = myJobs.filter(b=>b.status==='Done');
   if (!myJobs.length) return `<div class="empty"><div class="empty-ic">🔧</div><p>No jobs assigned to you yet.</p></div>`;
-  return `<div class="panel">
-    <div class="panel-head"><div class="panel-title">🔧 My Active Jobs (${active.length})</div></div>
-    <div class="panel-body booking-grid">${active.map(function(b){var mapsUrl=b.mapLat?'https://maps.google.com/?q='+b.mapLat+','+b.mapLng:'https://maps.google.com/?q='+encodeURIComponent(b.address||'');return '<div class="booking-card" onclick="openBookingDetail(\''+b.id+'\')">'+'<div class="bc-head"><div class="bc-avatar">'+((b.name||'?')[0].toUpperCase())+'</div><div><div class="bc-name">'+(b.name||'—')+'</div><div class="bc-id">'+b.id+'</div></div><span class="status-badge s-'+((b.status||'pending').toLowerCase())+'" style="margin-left:auto">'+b.status+'</span></div>'+'<div class="bc-service">🔧 '+(b.service||'—')+'</div>'+'<div style="font-size:12px;color:var(--text-dim);margin:6px 0">📍 '+(b.address||'—')+'</div>'+'<div class="bc-meta"><span class="bc-tag" style="background:var(--bg-elev2)">📅 '+formatDate(b.date)+'</span><span class="bc-tag" style="background:var(--bg-elev2)">🕐 '+(b.time||'—')+'</span></div>'+'<div style="margin-top:10px;display:flex;gap:6px"><a href="'+mapsUrl+'" target="_blank" class="btn btn-outline btn-xs">📍 Maps</a><button class="btn btn-success btn-xs" onclick="event.stopPropagation();markDone(\''+b.id+'\')" >✅ Done</button></div></div>';}).join('')||'<div class="empty">No active jobs</div>'}</div>
-  </div>
-  ${done.length?`<div class="panel">
-    <div class="panel-head"><div class="panel-title">✅ Completed Jobs (${done.length})</div></div>
-    <div class="panel-body"><div class="tbl-wrap"><table><thead><tr><th>ID</th><th>Client</th><th>Service</th><th>Date</th><th>Amount</th></tr></thead>
-    <tbody>'+done.map(function(b){return '<tr><td style="font-family:monospace;font-size:11px;color:var(--accent)">'+b.id+'</td><td>'+b.name+'</td><td style="font-size:12px">'+b.service+'</td><td>'+formatDate(b.date)+'</td><td>'+(b.amount?'₱'+parseFloat(b.amount).toLocaleString():'—')+'</td></tr>';}).join('')+'</tbody></table></div></div>
-  </div>`:''}`;
+
+  function techJobCard(b) {
+    var mapsUrl=b.mapLat?'https://maps.google.com/?q='+b.mapLat+','+b.mapLng:'https://maps.google.com/?q='+encodeURIComponent(b.address||'');
+    var callUrl = b.phone ? 'tel:'+b.phone.replace(/[^0-9+]/g,'') : '';
+    return '<div class="booking-card" style="border-left:4px solid '+(b.status==='Ongoing'?'var(--success)':b.status==='Confirmed'?'var(--accent)':'var(--warning)')+'" onclick="openBookingDetail(\''+b.id+'\')">'
+      +'<div class="bc-head"><div class="bc-avatar">'+((b.name||'?')[0].toUpperCase())+'</div><div><div class="bc-name">'+(b.name||'—')+'</div><div class="bc-id">'+b.id+'</div></div><span class="status-badge s-'+((b.status||'pending').toLowerCase())+'" style="margin-left:auto">'+b.status+'</span></div>'
+      +'<div class="bc-service">🔧 '+(b.service||'—')+'</div>'
+      +(b.serviceDetails?'<div style="font-size:11px;color:var(--text-dim);margin-top:2px">'+b.serviceDetails+'</div>':'')
+      +'<div style="font-size:12px;color:var(--text-dim);margin:6px 0">📍 '+(b.address||'—')+'</div>'
+      +'<div class="bc-meta"><span class="bc-tag" style="background:var(--bg-elev2)">📅 '+formatDate(b.date)+'</span><span class="bc-tag" style="background:var(--bg-elev2)">🕐 '+(b.time||'—')+'</span>'+(b.amount?'<span class="bc-tag" style="background:var(--bg-elev2)">💰 ₱'+parseFloat(b.amount).toLocaleString()+'</span>':'')+'</div>'
+      +'<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">'
+      +'<a href="'+mapsUrl+'" target="_blank" class="btn btn-outline btn-xs" onclick="event.stopPropagation()">📍 Navigate</a>'
+      +(callUrl?'<a href="'+callUrl+'" class="btn btn-outline btn-xs" onclick="event.stopPropagation()">📞 Call</a>':'')
+      +'<button class="btn btn-info btn-xs" onclick="event.stopPropagation();techQuickStatus(\''+b.id+'\')" >🔄 Status</button>'
+      +'<button class="btn btn-success btn-xs" onclick="event.stopPropagation();markDone(\''+b.id+'\')" >✅ Done</button>'
+      +'</div></div>';
+  }
+
+  var html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:16px">'
+    +'<div class="stat-card stat-gold"><div class="stat-icon">📋</div><div class="stat-label">Today</div><div class="stat-value">'+todayJobs.length+'</div></div>'
+    +'<div class="stat-card stat-info"><div class="stat-icon">🔧</div><div class="stat-label">Active</div><div class="stat-value">'+active.length+'</div></div>'
+    +'<div class="stat-card stat-success"><div class="stat-icon">✅</div><div class="stat-label">Done</div><div class="stat-value">'+done.length+'</div></div>'
+    +'</div>';
+
+  if (todayJobs.length) {
+    html += '<div class="panel" style="margin-bottom:12px"><div class="panel-head"><div class="panel-title">📋 Today\'s Jobs ('+todayJobs.length+')</div></div>'
+      +'<div class="panel-body booking-grid">'+todayJobs.map(techJobCard).join('')+'</div></div>';
+  }
+  if (past.length) {
+    html += '<div class="panel" style="margin-bottom:12px"><div class="panel-head"><div class="panel-title">⚠️ Overdue / Past Jobs ('+past.length+')</div></div>'
+      +'<div class="panel-body booking-grid">'+past.map(techJobCard).join('')+'</div></div>';
+  }
+  if (upcoming.length) {
+    html += '<div class="panel" style="margin-bottom:12px"><div class="panel-head"><div class="panel-title">📅 Upcoming ('+upcoming.length+')</div></div>'
+      +'<div class="panel-body booking-grid">'+upcoming.map(techJobCard).join('')+'</div></div>';
+  }
+  if (done.length) {
+    html += '<div class="panel"><div class="panel-head"><div class="panel-title">✅ Completed ('+done.length+')</div></div>'
+      +'<div class="panel-body"><div class="tbl-wrap"><table><thead><tr><th>ID</th><th>Client</th><th>Service</th><th>Date</th><th>Amount</th></tr></thead>'
+      +'<tbody>'+done.slice(0,20).map(function(b){return '<tr><td style="font-family:monospace;font-size:11px;color:var(--accent)">'+b.id+'</td><td>'+b.name+'</td><td style="font-size:12px">'+b.service+'</td><td>'+formatDate(b.date)+'</td><td>'+(b.amount?'₱'+parseFloat(b.amount).toLocaleString():'—')+'</td></tr>';}).join('')+'</tbody></table></div></div></div>';
+  }
+  return html;
+}
+
+function techQuickStatus(id) {
+  var b = BOOKINGS[id];
+  if (!b) return;
+  var opts = ['Confirmed','Ongoing','For Backjob'].filter(function(s){return s!==b.status;});
+  var sel = prompt('Update status for '+b.id+'\\nCurrent: '+b.status+'\\n\\nChoose:\\n'+opts.map(function(o,i){return (i+1)+'. '+o;}).join('\\n')+'\\n\\nEnter number:');
+  if (!sel) return;
+  var idx = parseInt(sel)-1;
+  if (idx>=0 && idx<opts.length) {
+    b.status = opts[idx];
+    saveLocalData();
+    switchView('my-jobs');
+    showToast('Status updated to '+opts[idx],'success');
+  }
 }
 
 /* ===========================
@@ -2985,7 +3141,147 @@ function renderComplaints() {
         }).join('');
       })()}
     </div>
-  </div>`;
+  </div>
+  ${renderWarrantyTracker()}
+  ${renderBackjobHistory()}`;
+}
+
+function renderWarrantyTracker() {
+  // Auto-generate warranty from Done bookings + manual WARRANTY_LOG
+  var activeW = [];
+  var expiredW = [];
+  var now = new Date();
+  // From WARRANTY_LOG (manual entries)
+  WARRANTY_LOG.forEach(function(w){
+    var end = new Date(w.endDate);
+    if (end >= now) activeW.push(w);
+    else expiredW.push(w);
+  });
+  // From Done bookings that have no manual warranty entry
+  var coveredIds = WARRANTY_LOG.map(function(w){return w.bookingId;});
+  Object.values(BOOKINGS).forEach(function(b){
+    if (b.status!=='Done'||!b.completedAt||coveredIds.indexOf(b.id)!==-1) return;
+    // Default warranty: 30 days for cleaning, 90 days for repair/install
+    var svc = (b.service||'').toLowerCase();
+    var days = (svc.indexOf('repair')!==-1||svc.indexOf('install')!==-1) ? 90 : 30;
+    var start = new Date(b.completedAt);
+    var end = new Date(start.getTime()+days*86400000);
+    var entry = {id:'AW-'+b.id,bookingId:b.id,clientName:b.name,service:b.service,warrantyDays:days,startDate:b.completedAt.split('T')[0],endDate:end.toISOString().split('T')[0],notes:'Auto-generated',auto:true};
+    if (end >= now) activeW.push(entry); else expiredW.push(entry);
+  });
+  // Sort by endDate
+  activeW.sort(function(a,b){return new Date(a.endDate)-new Date(b.endDate);});
+
+  var rows = activeW.map(function(w){
+    var daysLeft = Math.ceil((new Date(w.endDate)-now)/86400000);
+    var urgency = daysLeft<=7?'🔴':daysLeft<=14?'🟡':'🟢';
+    return '<tr>'
+      +'<td><strong>'+w.clientName+'</strong><div style="font-size:10.5px;color:var(--text-dim)">'+(w.bookingId||'—')+'</div></td>'
+      +'<td>'+w.service+'</td>'
+      +'<td style="text-align:center">'+w.warrantyDays+' days</td>'
+      +'<td>'+formatDate(w.startDate)+'</td>'
+      +'<td>'+formatDate(w.endDate)+'</td>'
+      +'<td style="text-align:center;font-weight:700">'+urgency+' '+daysLeft+'d</td>'
+      +'<td style="text-align:center">'+(w.auto?'<span style="font-size:10px;color:var(--text-dim)">Auto</span>':'<button class="btn btn-outline btn-xs" style="color:var(--danger)" onclick="deleteWarranty(\''+w.id+'\')">🗑️</button>')+'</td>'
+      +'</tr>';
+  }).join('');
+
+  return '<div class="panel" style="margin-top:16px"><div class="panel-head">'
+    +'<div class="panel-title">🛡️ Active Warranty Tracker ('+activeW.length+')</div>'
+    +'<button class="btn btn-gold btn-sm" onclick="openAddWarranty()">➕ Add Warranty</button></div>'
+    +'<div class="panel-body">'
+    +'<div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">Auto-generated from completed bookings (Cleaning: 30 days, Repair/Install: 90 days). Add manual entries for custom warranty periods.</div>'
+    +(activeW.length ?
+      '<div class="tbl-wrap"><table><thead><tr><th>Client</th><th>Service</th><th style="text-align:center">Period</th><th>Start</th><th>Expires</th><th style="text-align:center">Left</th><th style="text-align:center">Action</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    : '<div class="empty" style="padding:16px"><div class="empty-ic">✅</div>No active warranties</div>')
+    +'</div></div>';
+}
+
+function renderBackjobHistory() {
+  var backjobs = Object.values(BOOKINGS).filter(function(b){return b.status==='For Backjob';});
+  var completedBJ = Object.values(BOOKINGS).filter(function(b){
+    return b.notes && b.notes.toLowerCase().indexOf('backjob')!==-1 && b.status==='Done';
+  });
+
+  var rows = backjobs.map(function(b){
+    return '<tr>'
+      +'<td><strong>'+b.id+'</strong></td>'
+      +'<td>'+b.name+'</td>'
+      +'<td>'+b.service+'</td>'
+      +'<td>'+(b.technician||'Unassigned')+'</td>'
+      +'<td>'+formatDate(b.date)+'</td>'
+      +'<td><span class="status-badge s-for-backjob">For Backjob</span></td>'
+      +'<td><button class="btn btn-outline btn-xs" onclick="openBookingDetail(\''+b.id+'\')">👁️ View</button></td>'
+      +'</tr>';
+  }).join('');
+
+  return '<div class="panel" style="margin-top:16px"><div class="panel-head">'
+    +'<div class="panel-title">🔄 Backjob Tracker ('+backjobs.length+' active)</div></div>'
+    +'<div class="panel-body">'
+    +(backjobs.length ?
+      '<div class="tbl-wrap"><table><thead><tr><th>Booking</th><th>Client</th><th>Service</th><th>Technician</th><th>Date</th><th>Status</th><th>Action</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    : '<div class="empty" style="padding:16px"><div class="empty-ic">✅</div>No active backjobs</div>')
+    +'</div></div>';
+}
+
+function openAddWarranty() {
+  var bkOpts = Object.values(BOOKINGS).filter(function(b){return b.status==='Done';}).map(function(b){
+    return '<option value="'+b.id+'">'+b.id+' — '+b.name+' ('+b.service+')</option>';
+  }).join('');
+  var html = '<div class="form-grid">'
+    +'<div class="field"><label>Related Booking</label><select id="war_booking"><option value="">— Select —</option>'+bkOpts+'</select></div>'
+    +'<div class="field"><label>Client Name *</label><input id="war_client" placeholder="Client name"></div>'
+    +'<div class="field"><label>Service *</label><input id="war_service" placeholder="Service performed"></div>'
+    +'<div class="field"><label>Warranty Days *</label><input type="number" id="war_days" value="30" min="1"></div>'
+    +'<div class="field"><label>Start Date *</label><input type="date" id="war_start" value="'+new Date().toISOString().split('T')[0]+'"></div>'
+    +'<div class="field form-full"><label>Notes</label><input id="war_notes" placeholder="e.g. Parts warranty, labor only"></div>'
+    +'</div>';
+  document.getElementById('expModalTitle').textContent = 'Add Warranty Entry';
+  document.getElementById('expModalBody').innerHTML = html;
+  document.getElementById('expModalFoot').innerHTML =
+    '<button class="btn btn-outline btn-sm" onclick="closeModal(\'expenseModal\')">Cancel</button>'
+    +'<button class="btn btn-gold btn-sm" onclick="saveWarranty()">💾 Save</button>';
+  // Auto-fill from booking selection
+  document.getElementById('war_booking').addEventListener('change', function(){
+    var b = BOOKINGS[this.value];
+    if (b) {
+      document.getElementById('war_client').value = b.name||'';
+      document.getElementById('war_service').value = b.service||'';
+    }
+  });
+  openModal('expenseModal');
+}
+
+function saveWarranty() {
+  var client = (document.getElementById('war_client').value||'').trim();
+  var service = (document.getElementById('war_service').value||'').trim();
+  var days = parseInt(document.getElementById('war_days').value)||30;
+  var start = document.getElementById('war_start').value;
+  if (!client||!service||!start) { showToast('Fill in required fields','warning'); return; }
+  var endDate = new Date(new Date(start).getTime()+days*86400000).toISOString().split('T')[0];
+  WARRANTY_LOG.push({
+    id:'WR-'+Date.now(),
+    bookingId: document.getElementById('war_booking').value||'',
+    clientName: client,
+    service: service,
+    warrantyDays: days,
+    startDate: start,
+    endDate: endDate,
+    notes: (document.getElementById('war_notes').value||'').trim()
+  });
+  saveLocalData();
+  closeModal('expenseModal');
+  switchView('complaints');
+  showToast('Warranty entry added','success');
+  logActivity('🛡️','Added warranty: '+client+' — '+service+' ('+days+' days)','warranty');
+}
+
+function deleteWarranty(id) {
+  if (!confirm('Delete this warranty entry?')) return;
+  WARRANTY_LOG = WARRANTY_LOG.filter(function(w){return w.id!==id;});
+  saveLocalData();
+  switchView('complaints');
+  showToast('Warranty entry removed','info');
 }
 
 function openNewComplaint() {
@@ -3471,6 +3767,123 @@ function downloadReceiptPDF() {
   doc.save('DJCE-Receipt-'+b.id+'.pdf');
   showToast('Receipt PDF downloaded! 📄','success');
   logActivity('📄','Generated receipt for '+b.id,'document');
+}
+
+/* ===========================
+   SERVICE AGREEMENT / CONTRACT (Phase 4 #27d)
+=========================== */
+function generateServiceAgreement(id) {
+  var b = BOOKINGS[id];
+  if (!b) { showToast('Booking not found','error'); return; }
+  var today = new Date();
+  var dateStr = today.toLocaleDateString('en-PH',{year:'numeric',month:'long',day:'numeric'});
+  var amount = parseFloat(b.amount)||0;
+
+  // Determine warranty period
+  var svc = (b.service||'').toLowerCase();
+  var warrantyDays = 30;
+  if (svc.includes('repair')||svc.includes('install')) warrantyDays = 90;
+  var warrantyText = warrantyDays + ' days';
+
+  var w = window.open('','_blank','width=800,height=900');
+  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Service Agreement — '+b.refNo+'</title>'
+    +'<style>'
+    +'@page{size:A4;margin:20mm}'
+    +'*{margin:0;padding:0;box-sizing:border-box}'
+    +'body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1a1a;line-height:1.6;padding:20px}'
+    +'.header{text-align:center;margin-bottom:24px;border-bottom:3px double #1a3566;padding-bottom:16px}'
+    +'.header h1{font-size:18px;color:#1a3566;margin-bottom:2px}'
+    +'.header .sub{font-size:11px;color:#555}'
+    +'.header .logo{font-size:28px;font-weight:900;color:#f59e0b;margin-bottom:4px}'
+    +'.section{margin-bottom:18px}'
+    +'.section-title{font-size:13px;font-weight:700;color:#1a3566;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;border-bottom:1px solid #ddd;padding-bottom:4px}'
+    +'table{width:100%;border-collapse:collapse;margin:8px 0}'
+    +'table td{padding:5px 8px;border:1px solid #ddd;font-size:11.5px}'
+    +'table td:first-child{font-weight:700;width:35%;background:#f8f9fa;color:#333}'
+    +'.terms{font-size:11px;color:#333}'
+    +'.terms ol{padding-left:20px}'
+    +'.terms li{margin-bottom:6px}'
+    +'.sig-grid{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:40px}'
+    +'.sig-box{text-align:center}'
+    +'.sig-line{border-bottom:1px solid #333;height:40px;margin-bottom:4px}'
+    +'.sig-label{font-size:10.5px;color:#555}'
+    +'.footer{text-align:center;margin-top:30px;font-size:10px;color:#888;border-top:1px solid #ddd;padding-top:10px}'
+    +'.highlight{background:#fffbeb;padding:10px;border:1px solid #f59e0b;border-radius:6px;font-size:11.5px;margin:10px 0}'
+    +'@media print{body{padding:0}.no-print{display:none!important}}'
+    +'</style></head><body>'
+
+    +'<div class="no-print" style="text-align:center;margin-bottom:16px">'
+    +'<button onclick="window.print()" style="padding:10px 24px;background:#1a3566;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-weight:700">🖨️ Print / Save as PDF</button></div>'
+
+    +'<div class="header">'
+    +'<div class="logo">DJ-CE</div>'
+    +'<h1>DJ-CE Aircon & Electrical Services</h1>'
+    +'<div class="sub">Professional Aircon Installation, Repair & Maintenance</div>'
+    +'<div class="sub">📞 0976 259 2458 · 📧 djceservicesforyou@gmail.com</div>'
+    +'</div>'
+
+    +'<div style="text-align:center;margin-bottom:20px">'
+    +'<div style="font-size:16px;font-weight:800;color:#1a3566;text-transform:uppercase;letter-spacing:1px">SERVICE AGREEMENT</div>'
+    +'<div style="font-size:11px;color:#555">Contract No: '+b.refNo+' · Date: '+dateStr+'</div>'
+    +'</div>'
+
+    +'<div class="section">'
+    +'<div class="section-title">I. Parties</div>'
+    +'<table>'
+    +'<tr><td>Service Provider</td><td><strong>DJ-CE Aircon & Electrical Services</strong></td></tr>'
+    +'<tr><td>Client Name</td><td><strong>'+(b.name||'—')+'</strong></td></tr>'
+    +'<tr><td>Contact Number</td><td>'+(b.phone||'—')+'</td></tr>'
+    +'<tr><td>Email</td><td>'+(b.email||'—')+'</td></tr>'
+    +'<tr><td>Service Address</td><td>'+(b.address||'—')+(b.landmark?' ('+b.landmark+')':'')+'</td></tr>'
+    +'</table></div>'
+
+    +'<div class="section">'
+    +'<div class="section-title">II. Scope of Work</div>'
+    +'<table>'
+    +'<tr><td>Service Type</td><td><strong>'+(b.service||'—')+'</strong></td></tr>'
+    +'<tr><td>Scheduled Date</td><td>'+formatDate(b.date)+'</td></tr>'
+    +'<tr><td>Scheduled Time</td><td>'+(b.time||'To be confirmed')+'</td></tr>'
+    +'<tr><td>Assigned Technician</td><td>'+(b.technician||'To be assigned')+'</td></tr>'
+    +'<tr><td>Notes / Special Instructions</td><td>'+(b.notes||'None')+'</td></tr>'
+    +'</table></div>'
+
+    +'<div class="section">'
+    +'<div class="section-title">III. Service Fee</div>'
+    +'<div class="highlight">'
+    +'<table style="margin:0">'
+    +(b.feeService?'<tr><td>Service Fee</td><td style="text-align:right">₱'+parseFloat(b.feeService).toLocaleString()+'</td></tr>':'')
+    +(b.feeParts?'<tr><td>Materials / Parts</td><td style="text-align:right">₱'+parseFloat(b.feeParts).toLocaleString()+'</td></tr>':'')
+    +(b.feeTranspo?'<tr><td>Transportation</td><td style="text-align:right">₱'+parseFloat(b.feeTranspo).toLocaleString()+'</td></tr>':'')
+    +(b.feeOther?'<tr><td>Other Charges</td><td style="text-align:right">₱'+parseFloat(b.feeOther).toLocaleString()+'</td></tr>':'')
+    +(b.feeDiscount?'<tr><td style="color:#e74c3c">Discount</td><td style="text-align:right;color:#e74c3c">-₱'+parseFloat(b.feeDiscount).toLocaleString()+'</td></tr>':'')
+    +'<tr><td style="font-size:13px;font-weight:800;background:#1a3566;color:#fff">TOTAL AMOUNT</td>'
+    +'<td style="text-align:right;font-size:14px;font-weight:800;background:#1a3566;color:#f59e0b">₱'+amount.toLocaleString()+'</td></tr>'
+    +'</table></div></div>'
+
+    +'<div class="section">'
+    +'<div class="section-title">IV. Terms & Conditions</div>'
+    +'<div class="terms"><ol>'
+    +'<li><strong>Service Warranty:</strong> DJ-CE provides a <strong>'+warrantyText+'</strong> warranty on the service performed, covering workmanship defects only. This does not cover damage caused by misuse, power surges, or natural disasters.</li>'
+    +'<li><strong>Payment Terms:</strong> Full payment is due upon completion of service unless otherwise agreed upon in writing. Partial advance payment may be required for parts procurement.</li>'
+    +'<li><strong>Cancellation/Reschedule:</strong> Client may reschedule at least 24 hours before the scheduled service date without penalty. Same-day cancellations may incur a transportation fee.</li>'
+    +'<li><strong>Liability:</strong> DJ-CE shall not be liable for pre-existing defects in the unit or damage arising from electrical issues beyond the scope of work.</li>'
+    +'<li><strong>Additional Work:</strong> Any service beyond the agreed scope will be communicated to the client and is subject to additional charges with client approval.</li>'
+    +'<li><strong>Maintenance Advisory:</strong> Regular cleaning is recommended every 3-6 months depending on usage to maintain unit efficiency and prolong lifespan.</li>'
+    +'</ol></div></div>'
+
+    +'<div class="sig-grid">'
+    +'<div class="sig-box"><div class="sig-line"></div><div style="font-weight:700">'+(b.name||'Client Name')+'</div><div class="sig-label">CLIENT — Signature over Printed Name</div></div>'
+    +'<div class="sig-box"><div class="sig-line"></div><div style="font-weight:700">DJ-CE Aircon & Electrical Services</div><div class="sig-label">SERVICE PROVIDER — Authorized Representative</div></div>'
+    +'</div>'
+
+    +'<div class="footer">'
+    +'<div>This agreement is valid upon signing by both parties.</div>'
+    +'<div style="margin-top:4px">DJ-CE Aircon & Electrical Services · 📞 0976 259 2458 · djceservicesforyou@gmail.com</div>'
+    +'</div>'
+
+    +'</body></html>');
+  w.document.close();
+  logActivity('📄','Generated service agreement for '+b.refNo,'booking');
 }
 
 /* ===========================
@@ -5232,6 +5645,7 @@ function loadAcctData() {
     ACCT_PAYROLL   = JSON.parse(localStorage.getItem('djce_payroll')||'[]');
     ACCT_INVESTORS = JSON.parse(localStorage.getItem('djce_investors')||'[]');
     ACCT_13TH_MONTH= JSON.parse(localStorage.getItem('djce_13th_month')||'[]');
+    ACCT_TARGETS   = JSON.parse(localStorage.getItem('djce_targets')||'{}');
     UNIT_PRODUCTS  = JSON.parse(localStorage.getItem('djce_unit_products')||'[]');
     UNIT_SALES     = JSON.parse(localStorage.getItem('djce_unit_sales')||'[]');
   } catch(e) { console.warn('loadAcctData err', e); }
@@ -5243,6 +5657,7 @@ function saveAcctData() {
     localStorage.setItem('djce_payroll',   JSON.stringify(ACCT_PAYROLL));
     localStorage.setItem('djce_investors', JSON.stringify(ACCT_INVESTORS));
     localStorage.setItem('djce_13th_month',JSON.stringify(ACCT_13TH_MONTH));
+    localStorage.setItem('djce_targets',   JSON.stringify(ACCT_TARGETS));
     localStorage.setItem('djce_unit_products',JSON.stringify(UNIT_PRODUCTS));
     localStorage.setItem('djce_unit_sales',JSON.stringify(UNIT_SALES));
   } catch(e) { console.warn('saveAcctData err', e); }
@@ -5257,7 +5672,8 @@ function renderAccounting() {
     {id:'daily',     icon:'📋', label:'Daily Tracker'},
     {id:'payroll',   icon:'💵', label:'Payroll'},
     {id:'13th',      icon:'🎁', label:'13th Month'},
-    {id:'investors', icon:'📊', label:'Investor Shares'}
+    {id:'investors', icon:'📊', label:'Investor Shares'},
+    {id:'targets',   icon:'🎯', label:'Targets & Salary'}
   ];
   var tabBar = '<div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;overflow-x:auto;padding-bottom:4px">'
     +tabs.map(function(t){
@@ -5271,6 +5687,7 @@ function renderAccounting() {
     case 'payroll':   body = renderAcctPayroll(); break;
     case '13th':      body = renderAcct13th(); break;
     case 'investors': body = renderAcctInvestors(); break;
+    case 'targets':   body = renderAcctTargets(); break;
     default: body = renderAcctEmployees();
   }
   return '<div style="margin-bottom:10px;font-size:12px;color:var(--text-dim)">🧮 Accounting & Payroll · <strong>Owner + Head Tech Access Only</strong></div>' + tabBar + body;
@@ -5291,10 +5708,11 @@ function renderAcctEmployees() {
           +'<div style="font-size:11.5px;color:var(--text-dim);margin-top:2px">'+e.role+'</div></div>'
           +'<span class="bc-tag" style="background:color-mix(in srgb,'+(typeColors[e.type]||'var(--text-dim)')+' 15%,transparent);color:'+(typeColors[e.type]||'var(--text-dim)')+'">'+e.type+'</span>'
           +'</div>'
-          +'<div style="margin-top:10px;font-size:12px;display:flex;gap:12px;color:var(--text-dim)">'
+          +'<div style="margin-top:10px;font-size:12px;display:flex;flex-wrap:wrap;gap:12px;color:var(--text-dim)">'
           +'<span>💰 ₱'+(parseFloat(e.dailyRate)||0).toLocaleString()+'/day</span>'
           +(e.notes?'<span>📝 '+e.notes+'</span>':'')
           +'</div>'
+          +(e.bankName?'<div style="margin-top:8px;font-size:11.5px;color:var(--text-dim);border-top:1px solid var(--border);padding-top:8px">🏦 '+e.bankName+(e.accountNo?' · ****'+e.accountNo.slice(-4):'')+(e.accountName?' · '+e.accountName:'')+'</div>':'')
           +'<div style="margin-top:10px;display:flex;gap:6px">'
           +'<button class="btn btn-outline btn-xs" onclick="openEditEmployee(\''+e.id+'\')">✏️ Edit</button>'
           +'<button class="btn btn-outline btn-xs" style="color:var(--danger)" onclick="deleteEmployee(\''+e.id+'\')">🗑️</button>'
@@ -5316,6 +5734,10 @@ function openEditEmployee(editId) {
     +'</select></div>'
     +'<div class="field"><label>Daily Rate (₱)</label><input type="number" id="emp_rate" value="'+(e?e.dailyRate||'':'')+'" placeholder="0" min="0"></div>'
     +'<div class="field form-full"><label>Notes</label><input id="emp_notes" value="'+(e?e.notes||'':'')+'" placeholder="e.g. Saturdays only, family"></div>'
+    +'<div class="field form-full" style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px"><label style="font-weight:700;color:var(--accent)">🏦 Bank / ATM Details</label></div>'
+    +'<div class="field"><label>Bank Name</label><input id="emp_bank" value="'+(e?e.bankName||'':'')+'" placeholder="e.g. BDO, BPI, GCash"></div>'
+    +'<div class="field"><label>Account Number</label><input id="emp_acctno" value="'+(e?e.accountNo||'':'')+'" placeholder="Account / Card number"></div>'
+    +'<div class="field"><label>Account Name</label><input id="emp_acctname" value="'+(e?e.accountName||'':'')+'" placeholder="Name on account"></div>'
     +'</div>';
   document.getElementById('expModalTitle').textContent = e ? 'Edit Employee' : 'Add Employee';
   document.getElementById('expModalBody').innerHTML = html;
@@ -5334,7 +5756,10 @@ function saveEmployee(editId) {
     role: role,
     type: document.getElementById('emp_type').value,
     dailyRate: parseFloat(document.getElementById('emp_rate').value)||0,
-    notes: (document.getElementById('emp_notes').value||'').trim()
+    notes: (document.getElementById('emp_notes').value||'').trim(),
+    bankName: (document.getElementById('emp_bank').value||'').trim(),
+    accountNo: (document.getElementById('emp_acctno').value||'').trim(),
+    accountName: (document.getElementById('emp_acctname').value||'').trim()
   };
   if (editId) {
     var idx = ACCT_EMPLOYEES.findIndex(function(x){return x.id===editId;});
@@ -5710,10 +6135,154 @@ function deleteInvestor(id) {
   showToast('Investor removed','info');
 }
 
+// ─── TARGETS & SALARY SUB-TAB ────────────────────
+function renderAcctTargets() {
+  var yr = new Date().getFullYear();
+  var curMo = new Date().getMonth()+1;
+
+  // Monthly data rows
+  var moRows = '';
+  var yrTotalTarget = 0, yrTotalActual = 0, yrTotalExpenses = 0, yrTotalPayroll = 0;
+  for (var m=1; m<=12; m++) {
+    var key = yr+'-'+String(m).padStart(2,'0');
+    var tgt = ACCT_TARGETS[key] ? parseFloat(ACCT_TARGETS[key].target)||0 : 0;
+    // Actual revenue from Done bookings this month
+    var mDone = Object.values(BOOKINGS).filter(function(b){return b.status==='Done'&&b.date&&b.date.startsWith(key);});
+    var actual = mDone.reduce(function(s,b){return s+(parseFloat(b.amount)||0);},0);
+    // Expenses this month
+    var mExp = EXPENSES.filter(function(e){return e.date&&e.date.startsWith(key);}).reduce(function(s,e){return s+(parseFloat(e.amount)||0);},0);
+    // Payroll this month from daily log
+    var mPayroll = 0;
+    ACCT_EMPLOYEES.forEach(function(emp){
+      var rate = parseFloat(emp.dailyRate)||0;
+      var mLogs = ACCT_DAILY_LOG.filter(function(l){return l.employeeId===emp.id&&l.date&&l.date.startsWith(key)&&l.classification;});
+      mLogs.forEach(function(l){
+        if(l.classification==='half') mPayroll+=rate*0.5;
+        else if(l.classification==='full') mPayroll+=rate;
+        else if(l.classification==='ot') mPayroll+=rate*1.5;
+      });
+    });
+    var netProfit = actual - mExp - mPayroll;
+    var pct = tgt>0 ? Math.round(actual/tgt*100) : 0;
+    var isPast = m < curMo;
+    var isCur = m === curMo;
+
+    yrTotalTarget += tgt;
+    yrTotalActual += actual;
+    yrTotalExpenses += mExp;
+    yrTotalPayroll += mPayroll;
+
+    var moName = new Date(yr,m-1,1).toLocaleString('default',{month:'short'});
+    var barColor = pct>=100?'var(--success)':pct>=70?'var(--accent)':pct>=40?'var(--warning)':'var(--danger)';
+    moRows += '<tr style="'+(isCur?'background:color-mix(in srgb,var(--accent) 8%,transparent)':'')+'">'
+      +'<td style="font-weight:'+(isCur?'700':'400')+'">'+moName+(isCur?' 📍':'')+'</td>'
+      +'<td style="text-align:right"><input type="number" value="'+tgt+'" data-tgt-mo="'+key+'" style="width:90px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;text-align:right" placeholder="0" min="0"></td>'
+      +'<td style="text-align:right;font-weight:600;color:var(--accent)">₱'+actual.toLocaleString()+'</td>'
+      +'<td style="text-align:center"><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:8px;background:var(--bg);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+Math.min(pct,100)+'%;background:'+barColor+';border-radius:4px"></div></div><span style="font-size:11px;min-width:36px;text-align:right;font-weight:600;color:'+barColor+'">'+pct+'%</span></div></td>'
+      +'<td style="text-align:right;color:var(--danger)">₱'+mExp.toLocaleString()+'</td>'
+      +'<td style="text-align:right;color:var(--warning)">₱'+Math.round(mPayroll).toLocaleString()+'</td>'
+      +'<td style="text-align:right;font-weight:700;color:var(--'+(netProfit>=0?'success':'danger')+')">₱'+Math.round(netProfit).toLocaleString()+'</td>'
+      +'</tr>';
+  }
+
+  var yrNetProfit = yrTotalActual - yrTotalExpenses - yrTotalPayroll;
+  var yrPct = yrTotalTarget>0 ? Math.round(yrTotalActual/yrTotalTarget*100) : 0;
+
+  // Profit sharing computation
+  var profitShareHtml = '';
+  if (ACCT_INVESTORS.length && yrNetProfit > 0) {
+    profitShareHtml = '<div class="panel" style="margin-top:16px"><div class="panel-head"><div class="panel-title">💰 Profit Sharing Breakdown — '+yr+'</div></div><div class="panel-body">'
+      +'<div class="tbl-wrap"><table><thead><tr><th>Investor</th><th style="text-align:right">Share %</th><th style="text-align:right">Annual Share</th><th style="text-align:right">Monthly Ipon</th><th style="text-align:right">Released YTD</th></tr></thead><tbody>'
+      +ACCT_INVESTORS.map(function(inv){
+        var pct = parseFloat(inv.percentage)||0;
+        var annual = Math.round(yrNetProfit * pct / 100);
+        var monthly = Math.round(annual/12);
+        var ytd = monthly * curMo;
+        return '<tr><td><strong>'+inv.name+'</strong></td>'
+          +'<td style="text-align:right">'+pct+'%</td>'
+          +'<td style="text-align:right;font-weight:700;color:var(--accent)">₱'+annual.toLocaleString()+'</td>'
+          +'<td style="text-align:right">₱'+monthly.toLocaleString()+'</td>'
+          +'<td style="text-align:right;color:var(--success)">₱'+ytd.toLocaleString()+'</td>'
+          +'</tr>';
+      }).join('')
+      +'</tbody></table></div></div></div>';
+  }
+
+  // Salary summary per employee
+  var salaryHtml = '<div class="panel" style="margin-top:16px"><div class="panel-head"><div class="panel-title">💵 Salary Summary — '+yr+'</div></div><div class="panel-body">'
+    +'<div class="tbl-wrap"><table><thead><tr><th>Employee</th><th style="text-align:right">Daily Rate</th><th style="text-align:center">Days Worked</th><th style="text-align:right">Gross YTD</th><th style="text-align:right">Avg / Month</th>';
+  salaryHtml += '</tr></thead><tbody>';
+  var totalGrossYTD = 0;
+  ACCT_EMPLOYEES.forEach(function(emp){
+    var rate = parseFloat(emp.dailyRate)||0;
+    var logs = ACCT_DAILY_LOG.filter(function(l){
+      return l.employeeId===emp.id && l.date && l.date.startsWith(String(yr)) && l.classification;
+    });
+    var gross = 0;
+    logs.forEach(function(l){
+      if(l.classification==='half') gross+=rate*0.5;
+      else if(l.classification==='full') gross+=rate;
+      else if(l.classification==='ot') gross+=rate*1.5;
+    });
+    var avgMo = curMo > 0 ? Math.round(gross/curMo) : 0;
+    totalGrossYTD += gross;
+    salaryHtml += '<tr><td><strong>'+emp.name+'</strong><div style="font-size:10.5px;color:var(--text-dim)">'+emp.role+' · '+emp.type+'</div></td>'
+      +'<td style="text-align:right">₱'+rate.toLocaleString()+'</td>'
+      +'<td style="text-align:center">'+logs.length+'</td>'
+      +'<td style="text-align:right;font-weight:700;color:var(--accent)">₱'+Math.round(gross).toLocaleString()+'</td>'
+      +'<td style="text-align:right;color:var(--text-dim)">₱'+avgMo.toLocaleString()+'</td>'
+      +'</tr>';
+  });
+  salaryHtml += '<tr style="font-weight:700;border-top:2px solid var(--border)"><td colspan="3" style="text-align:right">TOTAL SALARY YTD</td>'
+    +'<td style="text-align:right;color:var(--accent);font-size:15px">₱'+Math.round(totalGrossYTD).toLocaleString()+'</td><td></td></tr>';
+  salaryHtml += '</tbody></table></div></div></div>';
+
+  return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:16px">'
+    +'<div class="stat-card stat-gold"><div class="stat-icon">🎯</div><div class="stat-label">'+yr+' Target</div><div class="stat-value" style="font-size:15px">₱'+yrTotalTarget.toLocaleString()+'</div></div>'
+    +'<div class="stat-card stat-info"><div class="stat-icon">💰</div><div class="stat-label">'+yr+' Actual</div><div class="stat-value" style="font-size:15px;color:var(--accent)">₱'+yrTotalActual.toLocaleString()+'</div></div>'
+    +'<div class="stat-card '+(yrPct>=100?'stat-success':'stat-warning')+'"><div class="stat-icon">'+(yrPct>=100?'✅':'📊')+'</div><div class="stat-label">Achievement</div><div class="stat-value" style="font-size:15px">'+yrPct+'%</div></div>'
+    +'<div class="stat-card '+(yrNetProfit>=0?'stat-success':'stat-danger')+'"><div class="stat-icon">'+(yrNetProfit>=0?'📈':'📉')+'</div><div class="stat-label">Net Profit</div><div class="stat-value" style="font-size:15px">₱'+Math.round(yrNetProfit).toLocaleString()+'</div></div>'
+    +'</div>'
+    +'<div class="panel"><div class="panel-head"><div class="panel-title">🎯 Monthly Revenue Targets — '+yr+'</div>'
+    +'<button class="btn btn-gold btn-sm" onclick="saveMonthlyTargets()">💾 Save Targets</button></div>'
+    +'<div class="panel-body">'
+    +'<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">Set monthly revenue targets. Actual = Done bookings. Net = Actual − Expenses − Payroll.</div>'
+    +'<div class="tbl-wrap"><table><thead><tr><th>Month</th><th style="text-align:right">Target (₱)</th><th style="text-align:right">Actual</th><th style="text-align:center;min-width:120px">Progress</th><th style="text-align:right">Expenses</th><th style="text-align:right">Payroll</th><th style="text-align:right">Net Profit</th></tr></thead>'
+    +'<tbody>'+moRows
+    +'<tr style="font-weight:700;border-top:2px solid var(--border)"><td>TOTAL</td>'
+    +'<td style="text-align:right">₱'+yrTotalTarget.toLocaleString()+'</td>'
+    +'<td style="text-align:right;color:var(--accent)">₱'+yrTotalActual.toLocaleString()+'</td>'
+    +'<td style="text-align:center;font-weight:700;color:var(--'+(yrPct>=100?'success':'warning')+')">'+yrPct+'%</td>'
+    +'<td style="text-align:right;color:var(--danger)">₱'+yrTotalExpenses.toLocaleString()+'</td>'
+    +'<td style="text-align:right;color:var(--warning)">₱'+Math.round(yrTotalPayroll).toLocaleString()+'</td>'
+    +'<td style="text-align:right;color:var(--'+(yrNetProfit>=0?'success':'danger')+');font-size:15px">₱'+Math.round(yrNetProfit).toLocaleString()+'</td>'
+    +'</tr></tbody></table></div>'
+    +'</div></div>'
+    +profitShareHtml
+    +salaryHtml;
+}
+
+function saveMonthlyTargets() {
+  var inputs = document.querySelectorAll('[data-tgt-mo]');
+  inputs.forEach(function(inp){
+    var key = inp.getAttribute('data-tgt-mo');
+    var val = parseFloat(inp.value)||0;
+    if (val>0) {
+      if (!ACCT_TARGETS[key]) ACCT_TARGETS[key] = {};
+      ACCT_TARGETS[key].target = val;
+    } else {
+      delete ACCT_TARGETS[key];
+    }
+  });
+  saveAcctData();
+  showToast('Monthly targets saved','success');
+  logActivity('🎯','Updated monthly revenue targets','accounting');
+}
+
 /* ===========================
    UNIT SALES MODULE (Batch 4)
 =========================== */
-var _unitTab = 'inventory'; // 'inventory' or 'sales'
+var _unitTab = 'inventory'; // 'inventory' or 'sales' or 'supplies'
 function switchUnitTab(t) { _unitTab = t; switchView('unitsales'); }
 
 function renderUnitSales() {
@@ -5721,6 +6290,7 @@ function renderUnitSales() {
   var tabBar = '<div style="display:flex;gap:6px;margin-bottom:16px">'
     +'<button class="btn btn-sm '+(_unitTab==='inventory'?'btn-gold':'btn-outline')+'" onclick="switchUnitTab(\'inventory\')">📦 Inventory</button>'
     +'<button class="btn btn-sm '+(_unitTab==='sales'?'btn-gold':'btn-outline')+'" onclick="switchUnitTab(\'sales\')">🧾 Sales</button>'
+    +'<button class="btn btn-sm '+(_unitTab==='supplies'?'btn-gold':'btn-outline')+'" onclick="switchUnitTab(\'supplies\')">🧴 Supplies</button>'
     +'</div>';
 
   // Sales KPIs
@@ -5737,7 +6307,7 @@ function renderUnitSales() {
     +'<div class="stat-card stat-gold"><div class="stat-icon">💰</div><div class="stat-label">All-Time Sales</div><div class="stat-value" style="color:var(--accent)">₱'+allSalesRev.toLocaleString()+'</div><div class="stat-sub">'+UNIT_SALES.length+' transactions</div></div>'
     +'</div>';
 
-  var body = _unitTab==='inventory' ? renderUnitInventory() : renderUnitSalesLog();
+  var body = _unitTab==='inventory' ? renderUnitInventory() : _unitTab==='supplies' ? renderSupplies() : renderUnitSalesLog();
   return '<div style="margin-bottom:10px;font-size:12px;color:var(--text-dim)">🏷️ Unit Sales & Inventory</div>' + kpi + tabBar + body;
 }
 
@@ -5825,6 +6395,141 @@ function deleteProduct(id) {
   saveAcctData();
   switchView('unitsales');
   showToast('Product removed','info');
+}
+
+// ─── SERVICE SUPPLIES / STOCK ─────────────────────
+function renderSupplies() {
+  var lowCount = INVENTORY.filter(function(i){return (parseInt(i.qty)||0)<=(parseInt(i.minStock)||2);}).length;
+  var totalItems = INVENTORY.length;
+  var totalValue = INVENTORY.reduce(function(s,i){return s+((parseFloat(i.cost)||0)*(parseInt(i.qty)||0));},0);
+
+  var alerts = '';
+  if (lowCount) {
+    alerts = '<div style="background:rgba(231,76,60,.1);border:1px solid var(--danger);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12.5px">'
+      +'<strong style="color:var(--danger)">⚠️ '+lowCount+' item'+(lowCount>1?'s':'')+' low on stock!</strong></div>';
+  }
+
+  if (!INVENTORY.length) {
+    return '<div class="panel"><div class="panel-head"><div class="panel-title">🧴 Service Supplies</div>'
+      +'<button class="btn btn-gold btn-sm" onclick="openEditSupply()">➕ Add Supply</button></div>'
+      +'<div class="panel-body"><div class="empty" style="padding:24px"><div class="empty-ic">🧴</div>No supplies tracked yet. Add chemicals, spare parts, filters, etc.</div></div></div>';
+  }
+
+  // Group by category
+  var cats = {};
+  INVENTORY.forEach(function(i){
+    var c = i.category||'Uncategorized';
+    if (!cats[c]) cats[c]=[];
+    cats[c].push(i);
+  });
+
+  var cards = '';
+  Object.keys(cats).sort().forEach(function(cat){
+    cards += '<div style="margin-bottom:14px"><div style="font-weight:700;font-size:12.5px;color:var(--accent);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">'+cat+'</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px">';
+    cats[cat].forEach(function(i){
+      var qty = parseInt(i.qty)||0;
+      var min = parseInt(i.minStock)||2;
+      var low = qty<=min;
+      var pct = min>0 ? Math.min(100, Math.round((qty/min)*100)) : 100;
+      var barColor = low ? 'var(--danger)' : pct<200 ? 'var(--warning)' : 'var(--success)';
+      cards += '<div style="background:var(--bg-elev2);border:1px solid '+(low?'var(--danger)':'var(--border)')+';border-radius:10px;padding:12px'+(low?';box-shadow:0 0 0 1px var(--danger)':'')+'">'
+        +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
+        +'<div><div style="font-weight:700;font-size:13px">'+(i.name||'—')+'</div>'
+        +'<div style="font-size:11px;color:var(--text-dim);margin-top:2px">'+(i.unit||'pcs')+(i.cost?' · ₱'+parseFloat(i.cost).toLocaleString()+' each':'')+'</div></div>'
+        +'<div style="text-align:right;font-size:18px;font-weight:800;color:'+(low?'var(--danger)':'var(--text)')+'">'+qty+'</div>'
+        +'</div>'
+        +'<div style="margin-top:8px;background:var(--border);border-radius:4px;height:6px;overflow:hidden">'
+        +'<div style="width:'+Math.min(100,pct)+'%;height:100%;background:'+barColor+';border-radius:4px"></div></div>'
+        +'<div style="display:flex;justify-content:space-between;margin-top:4px;font-size:10.5px;color:var(--text-dim)">'
+        +'<span>'+(low?'🔴 LOW':'🟢 OK')+' (min: '+min+')</span>'
+        +(i.notes?'<span>'+i.notes+'</span>':'')
+        +'</div>'
+        +'<div style="margin-top:8px;display:flex;gap:6px">'
+        +'<button class="btn btn-outline btn-xs" onclick="adjustSupplyQty(\''+i.id+'\',1)">➕</button>'
+        +'<button class="btn btn-outline btn-xs" onclick="adjustSupplyQty(\''+i.id+'\',-1)">➖</button>'
+        +'<button class="btn btn-outline btn-xs" onclick="openEditSupply(\''+i.id+'\')">✏️</button>'
+        +'<button class="btn btn-outline btn-xs" style="color:var(--danger)" onclick="deleteSupply(\''+i.id+'\')">🗑️</button>'
+        +'</div></div>';
+    });
+    cards += '</div></div>';
+  });
+
+  var stats = '<div class="stats-grid" style="grid-template-columns:repeat(auto-fill,minmax(130px,1fr));margin-bottom:14px">'
+    +'<div class="stat-card stat-gold"><div class="stat-icon">🧴</div><div class="stat-label">Items</div><div class="stat-value">'+totalItems+'</div></div>'
+    +'<div class="stat-card '+(lowCount?'stat-danger':'stat-success')+'"><div class="stat-icon">'+(lowCount?'⚠️':'✅')+'</div><div class="stat-label">Low Stock</div><div class="stat-value" style="color:'+(lowCount?'var(--danger)':'var(--success)')+'">'+lowCount+'</div></div>'
+    +'<div class="stat-card stat-gold"><div class="stat-icon">💰</div><div class="stat-label">Total Value</div><div class="stat-value" style="font-size:16px">₱'+totalValue.toLocaleString()+'</div></div>'
+    +'</div>';
+
+  return '<div class="panel"><div class="panel-head"><div class="panel-title">🧴 Service Supplies</div>'
+    +'<button class="btn btn-gold btn-sm" onclick="openEditSupply()">➕ Add Supply</button></div>'
+    +'<div class="panel-body">'+stats+alerts+cards+'</div></div>';
+}
+
+function openEditSupply(editId) {
+  var i = editId ? INVENTORY.find(function(x){return x.id===editId;}) : null;
+  var cats = ['Refrigerant','Cleaning Chemical','Filter','Spare Part','Wire/Cable','Copper Tube','Electrical','Tool','Other'];
+  var catOpts = cats.map(function(c){return '<option '+(i&&i.category===c?'selected':'')+'>'+c+'</option>';}).join('');
+  var html = '<div class="form-grid">'
+    +'<div class="field"><label>Item Name *</label><input id="sup_name" value="'+(i?i.name||'':'')+'" placeholder="e.g. R22 Refrigerant, Aircon Filter 1HP"></div>'
+    +'<div class="field"><label>Category</label><select id="sup_cat">'+catOpts+'</select></div>'
+    +'<div class="field"><label>Quantity *</label><input type="number" id="sup_qty" value="'+(i?i.qty||0:0)+'" min="0"></div>'
+    +'<div class="field"><label>Unit</label><input id="sup_unit" value="'+(i?i.unit||'pcs':'pcs')+'" placeholder="pcs, kg, liters, meters"></div>'
+    +'<div class="field"><label>Min Stock Alert</label><input type="number" id="sup_min" value="'+(i?i.minStock||2:2)+'" min="0" placeholder="Alert when qty ≤ this"></div>'
+    +'<div class="field"><label>Cost per Unit (₱)</label><input type="number" id="sup_cost" value="'+(i?i.cost||'':'')+'" min="0" step="0.01"></div>'
+    +'<div class="field form-full"><label>Notes</label><input id="sup_notes" value="'+(i?i.notes||'':'')+'" placeholder="e.g. supplier, brand"></div>'
+    +'</div>';
+  document.getElementById('expModalTitle').textContent = i ? 'Edit Supply' : 'Add Supply';
+  document.getElementById('expModalBody').innerHTML = html;
+  document.getElementById('expModalFoot').innerHTML =
+    '<button class="btn btn-outline btn-sm" onclick="closeModal(\'expenseModal\')">Cancel</button>'
+    +'<button class="btn btn-gold btn-sm" onclick="saveSupply('+(editId?"'"+editId+"'":'null')+')">💾 Save</button>';
+  openModal('expenseModal');
+}
+
+function saveSupply(editId) {
+  var name = (document.getElementById('sup_name').value||'').trim();
+  if (!name) { showToast('Item name is required','warning'); return; }
+  var data = {
+    name: name,
+    category: document.getElementById('sup_cat').value,
+    qty: parseInt(document.getElementById('sup_qty').value)||0,
+    unit: (document.getElementById('sup_unit').value||'pcs').trim(),
+    minStock: parseInt(document.getElementById('sup_min').value)||2,
+    cost: parseFloat(document.getElementById('sup_cost').value)||0,
+    notes: (document.getElementById('sup_notes').value||'').trim()
+  };
+  if (editId) {
+    var idx = INVENTORY.findIndex(function(x){return x.id===editId;});
+    if (idx>=0) Object.assign(INVENTORY[idx], data);
+  } else {
+    data.id = 'SUP-'+Date.now();
+    INVENTORY.push(data);
+  }
+  saveLocalData();
+  closeModal('expenseModal');
+  switchView('unitsales');
+  showToast(editId?'Supply updated':'Supply added','success');
+  logActivity('🧴',(editId?'Updated':'Added')+' supply: '+name,'inventory');
+}
+
+function adjustSupplyQty(id, delta) {
+  var item = INVENTORY.find(function(x){return x.id===id;});
+  if (!item) return;
+  var newQty = Math.max(0, (parseInt(item.qty)||0) + delta);
+  item.qty = newQty;
+  saveLocalData();
+  switchView('unitsales');
+  var low = newQty <= (parseInt(item.minStock)||2);
+  showToast(item.name+': '+newQty+' '+(item.unit||'pcs')+(low?' ⚠️ LOW STOCK!':''), low?'warning':'success');
+}
+
+function deleteSupply(id) {
+  if (!confirm('Delete this supply item?')) return;
+  INVENTORY = INVENTORY.filter(function(x){return x.id!==id;});
+  saveLocalData();
+  switchView('unitsales');
+  showToast('Supply removed','info');
 }
 
 // ─── SALES LOG ────────────────────────────────────
@@ -6193,6 +6898,10 @@ function saveLocalData() {
   localStorage.setItem('djce_expenses', JSON.stringify(EXPENSES));
   localStorage.setItem('djce_service_catalog', JSON.stringify(SERVICE_CATALOG));
   try { localStorage.setItem('djce_photos', JSON.stringify(BOOKING_PHOTOS)); } catch(e) { console.warn('Photos too large for localStorage — clearing oldest'); }
+  localStorage.setItem('djce_comm_log', JSON.stringify(COMM_LOG));
+  localStorage.setItem('djce_inventory', JSON.stringify(INVENTORY));
+  localStorage.setItem('djce_feedback', JSON.stringify(FEEDBACK));
+  localStorage.setItem('djce_warranty', JSON.stringify(WARRANTY_LOG));
 }
 
 function loadLocalData() {
@@ -6205,6 +6914,10 @@ function loadLocalData() {
   try { BOOKING_PHOTOS = JSON.parse(localStorage.getItem('djce_photos')||'{}'); } catch(e) { BOOKING_PHOTOS={}; }
   try { SERVICE_CATALOG = JSON.parse(localStorage.getItem('djce_service_catalog')||'{}'); } catch(e) { SERVICE_CATALOG={}; }
   if (!Object.keys(SERVICE_CATALOG).length) SERVICE_CATALOG = JSON.parse(JSON.stringify(DEFAULT_SERVICE_CATALOG));
+  try { COMM_LOG = JSON.parse(localStorage.getItem('djce_comm_log')||'[]'); } catch(e) { COMM_LOG=[]; }
+  try { INVENTORY = JSON.parse(localStorage.getItem('djce_inventory')||'[]'); } catch(e) { INVENTORY=[]; }
+  try { FEEDBACK = JSON.parse(localStorage.getItem('djce_feedback')||'[]'); } catch(e) { FEEDBACK=[]; }
+  try { WARRANTY_LOG = JSON.parse(localStorage.getItem('djce_warranty')||'[]'); } catch(e) { WARRANTY_LOG=[]; }
   autoPurgeTrash();
 }
 
@@ -6891,11 +7604,64 @@ function openClientModal(key){
       '<td><span class="status-badge s-'+(b.status||'pending').toLowerCase()+'">'+b.status+'</span></td>'+
       '<td>'+(b.amount?'₱'+parseFloat(b.amount).toLocaleString():'—')+'</td></tr>'
     ).join('')+'</tbody></table></div>' :
-    '<div class="empty" style="padding:14px">No bookings on record</div>');
+    '<div class="empty" style="padding:14px">No bookings on record</div>')+
+    renderCommLogSection(c.name);
   document.getElementById('clmFoot').innerHTML=
     '<button class="btn btn-outline btn-sm" onclick="closeModal(\'clientModal\')">Close</button>'+
     '<button class="btn btn-gold btn-sm" onclick="openNewBooking(\''+c.name+'\',\''+c.phone+'\',\''+c.address+'\');closeModal(\'clientModal\')">📋 New Booking</button>';
   openModal('clientModal');
+}
+
+function renderCommLogSection(clientName) {
+  var logs = COMM_LOG.filter(function(l){return l.clientName===clientName;}).sort(function(a,b){return new Date(b.date)-new Date(a.date);});
+  var typeIcons = {call:'📞',text:'💬',email:'📧',fb:'📘'};
+  var rows = logs.map(function(l){
+    return '<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">'
+      +'<div style="font-size:18px">'+(typeIcons[l.type]||'📝')+'</div>'
+      +'<div style="flex:1"><div style="font-weight:600">'+(l.direction==='in'?'⬅️ Incoming':'➡️ Outgoing')+' '+l.type+'</div>'
+      +'<div style="color:var(--text-dim);margin-top:2px">'+l.summary+'</div>'
+      +'<div style="color:var(--text-dim);font-size:11px;margin-top:3px">'+formatDate(l.date)+' · by '+l.by+'</div></div></div>';
+  }).join('');
+  return '<div class="sec-divider" style="margin-top:14px">📞 Communication Log ('+logs.length+')'
+    +' <button class="btn btn-outline btn-xs" style="margin-left:8px" onclick="openAddCommLog(\''+clientName.replace(/'/g,"\\'")+'\')">➕ Add</button></div>'
+    +(logs.length ? '<div style="max-height:200px;overflow-y:auto">'+rows+'</div>' : '<div style="font-size:12px;color:var(--text-dim);padding:8px 0">No communication logged yet.</div>');
+}
+
+function openAddCommLog(clientName) {
+  var html = '<div class="form-grid">'
+    +'<div class="field"><label>Client</label><input id="cl_client" value="'+clientName+'" readonly style="background:var(--bg-elev2)"></div>'
+    +'<div class="field"><label>Type *</label><select id="cl_type"><option value="call">📞 Call</option><option value="text">💬 Text/SMS</option><option value="email">📧 Email</option><option value="fb">📘 FB Messenger</option></select></div>'
+    +'<div class="field"><label>Direction *</label><select id="cl_dir"><option value="out">➡️ Outgoing</option><option value="in">⬅️ Incoming</option></select></div>'
+    +'<div class="field"><label>Date</label><input type="date" id="cl_date" value="'+new Date().toISOString().split('T')[0]+'"></div>'
+    +'<div class="field form-full"><label>Summary *</label><textarea id="cl_summary" placeholder="Brief description of communication..."></textarea></div>'
+    +'</div>';
+  document.getElementById('expModalTitle').textContent = '📞 Log Communication';
+  document.getElementById('expModalBody').innerHTML = html;
+  document.getElementById('expModalFoot').innerHTML =
+    '<button class="btn btn-outline btn-sm" onclick="closeModal(\'expenseModal\')">Cancel</button>'
+    +'<button class="btn btn-gold btn-sm" onclick="saveCommLog()">💾 Save</button>';
+  openModal('expenseModal');
+}
+
+function saveCommLog() {
+  var client = (document.getElementById('cl_client').value||'').trim();
+  var summary = (document.getElementById('cl_summary').value||'').trim();
+  if (!client||!summary) { showToast('Fill in required fields','warning'); return; }
+  COMM_LOG.push({
+    id: 'CL-'+Date.now(),
+    bookingId: '',
+    clientName: client,
+    type: document.getElementById('cl_type').value,
+    direction: document.getElementById('cl_dir').value,
+    summary: summary,
+    date: document.getElementById('cl_date').value||new Date().toISOString().split('T')[0],
+    by: session.name
+  });
+  saveLocalData();
+  closeModal('expenseModal');
+  openClientModal(client);
+  showToast('Communication logged','success');
+  logActivity('📞','Logged '+document.getElementById('cl_type').value+' with '+client,'communication');
 }
 
 
@@ -7253,7 +8019,8 @@ function changeMyPassword(){
   const cp=document.getElementById('set_conpw')?.value;
   if(!cur||!np||!cp){showToast('Please fill in all fields','error');return;}
   if(USERS[session.username].password!==cur){showToast('Current password is incorrect','error');return;}
-  if(np.length<6){showToast('New password must be at least 6 characters','error');return;}
+  var pwErr=validateStrongPassword(np);
+  if(pwErr){showToast(pwErr,'error');return;}
   if(np!==cp){showToast('Passwords do not match','error');return;}
   if(np===cur){showToast('New password must be different from current','error');return;}
   USERS[session.username].password=np;
@@ -7280,7 +8047,8 @@ function submitForcedPw(){
   const cp=document.getElementById('fpw_confirm').value;
   const err=document.getElementById('fpwErr');
   err.style.display='none';
-  if(!np||np.length<6){err.textContent='Password must be at least 6 characters.';err.style.display='block';return;}
+  var pwErr2=validateStrongPassword(np);
+  if(!np||pwErr2){err.textContent=pwErr2||'Password is required.';err.style.display='block';return;}
   if(np!==cp){err.textContent='Passwords do not match.';err.style.display='block';return;}
   USERS[session.username].password=np;
   USERS[session.username].lastPwChange=new Date().toISOString();
@@ -7721,5 +8489,17 @@ function changePinFromSettings() {
   </div>
 </div>
 
+<script>
+// PWA Service Worker Registration
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('sw.js').then(function(reg) {
+      console.log('DJ-CE SW registered:', reg.scope);
+    }).catch(function(err) {
+      console.log('SW registration failed:', err);
+    });
+  });
+}
+</script>
 </body>
 </html>

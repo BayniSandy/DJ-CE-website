@@ -1527,3 +1527,53 @@ function sendManualReminder(p) {
   }
   return { ok: false, error: 'Booking not found' };
 }
+
+/* ─── DATA BACKUP (Phase 4 #27a) ─────────────────────────── */
+/**
+ * Creates a timestamped copy of the entire spreadsheet in a "DJ-CE Backups" folder.
+ * Set up as a weekly trigger: Triggers > Add Trigger > backupSpreadsheet > Time-driven > Week timer
+ */
+function backupSpreadsheet() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var name = BUSINESS_NAME + ' Backup — ' + Utilities.formatDate(new Date(), TIMEZONE, 'yyyy-MM-dd HH:mm');
+
+  // Find or create backup folder
+  var folders = DriveApp.getFoldersByName('DJ-CE Backups');
+  var folder = folders.hasNext() ? folders.next() : DriveApp.createFolder('DJ-CE Backups');
+
+  // Copy spreadsheet to backup folder
+  var file = DriveApp.getFileById(SHEET_ID);
+  var copy = file.makeCopy(name, folder);
+
+  // Clean up old backups — keep last 8
+  var backups = [];
+  var files = folder.getFiles();
+  while (files.hasNext()) {
+    var f = files.next();
+    backups.push({ file: f, date: f.getDateCreated() });
+  }
+  backups.sort(function(a, b) { return b.date - a.date; });
+  if (backups.length > 8) {
+    for (var i = 8; i < backups.length; i++) {
+      backups[i].file.setTrashed(true);
+    }
+  }
+
+  // Send confirmation email
+  try {
+    MailApp.sendEmail({
+      to: NOTIF_EMAIL,
+      subject: '✅ DJ-CE Data Backup Complete — ' + Utilities.formatDate(new Date(), TIMEZONE, 'MMM dd, yyyy'),
+      htmlBody: '<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:20px">'
+        + '<h2 style="color:#b8860b">✅ Backup Complete</h2>'
+        + '<p>A backup of your DJ-CE database was created:</p>'
+        + '<p><strong>' + name + '</strong></p>'
+        + '<p>📁 Location: DJ-CE Backups folder in Google Drive</p>'
+        + '<p>📊 ' + backups.length + ' total backup(s) stored (max 8 kept)</p>'
+        + '<p style="color:#888;font-size:12px">This is an automated backup notification.</p>'
+        + '</div>'
+    });
+  } catch(e) { Logger.log('Backup email failed: ' + e); }
+
+  return { ok: true, action: 'backup', file: copy.getName(), id: copy.getId() };
+}
