@@ -975,6 +975,7 @@ const DEFAULT_ACCOUNTS = {
   tech1:  { username:'tech1',  password:'tech2025',  name:'Papa (Senior Tech)',role:'tech',  avatar:'PT', lastPwChange: null, forceChange: true },
   tech2:  { username:'tech2',  password:'tech2025',  name:'Helper 1',          role:'tech',  avatar:'H1', lastPwChange: null, forceChange: true },
   tech3:  { username:'tech3',  password:'tech2025',  name:'Helper 2',          role:'tech',  avatar:'H2', lastPwChange: null, forceChange: true },
+  mama:   { username:'mama',   password:'mama2025',  name:'Mama (Marketing)',  role:'mama',  avatar:'MA', lastPwChange: null, forceChange: true },
 };
 let USERS = {};
 
@@ -1107,7 +1108,7 @@ function getServiceCode(svc) {
 }
 
 let REF_COUNTERS = {}; // cached from Sheets { mmyy: {monthly, total} }
-const OPEX_CATEGORIES = ['Gas / Fuel', 'Payroll', 'Parts & Materials', 'Tricycle / Transport', 'Food Allowance', 'Tools & Equipment', 'Utilities', 'Other'];
+const OPEX_CATEGORIES = ['Gas / Fuel', 'Payroll', 'Parts & Materials', 'Tricycle / Transport', 'Food Allowance', 'Tools & Equipment', 'Utilities', 'Warranty', 'Other'];
 const TEAM_RATES = {
   'Papa (Senior Tech)': { type: 'senior', label: 'Senior Tech', dailyRate: 0, food: 0, otRate: 0, note: 'Family — flexible' },
   'Helper 1':           { type: 'helper', label: 'Helper', dailyRate: 500, food: 100, otRate: 100, note: '₱500/day, -₱100 food = ₱400 net; ₱100 flat OT' },
@@ -1158,12 +1159,16 @@ let BOOKING_PHOTOS = {};
 let SCHEDULE_SLOTS = []; // { slotId, date, timeSlot, label, time, maxBookings, currentBookings, remaining, status }
 
 // Accounting module data (local, saved to localStorage)
-let ACCT_EMPLOYEES = []; // { id, name, role, type:'fixed'|'commission'|'oncall'|'investor', dailyRate, notes }
+let ACCT_EMPLOYEES = []; // { id, name, role, type:'fixed'|'commission'|'oncall'|'investor', dailyRate, mealAllowance, accountUsername, notes, bankName, accountNo, accountName }
 let ACCT_DAILY_LOG = []; // { id, date, employeeId, jobsDone, classification:'half'|'full'|'ot', auditedBy, notes }
 let ACCT_PAYROLL = [];   // { id, period, employeeId, daysWorked, halfDays, fullDays, otDays, gross, deductions, net, status:'draft'|'released' }
 let ACCT_INVESTORS = []; // { id, name, percentage, notes }
 let ACCT_13TH_MONTH = []; // { id, employeeId, year, monthly:[], total, status:'accumulating'|'released' }
 let ACCT_TARGETS = {};   // { '2026-01': { target: 50000, notes: '' }, ... } keyed by YYYY-MM
+let ACCT_COMMISSIONS = []; // { id, bookingId, referredBy, type:'new'|'repeat'|'follow-up', grossProfit, rate, amount, status:'pending'|'approved', approvedDate, month }
+let COMMISSION_RATES = { newClient: 3, repeatClient: 2, followUpCleaning: 3 }; // percentages of gross profit
+let ACCT_PETTY_CASH = []; // { id, date, type:'release'|'liquidation'|'replenish', amount, description, receiptRef, relatedJobId, category, month }
+let PETTY_CASH_CONFIG = { monthlyAllocation: 5000 }; // configurable monthly petty cash budget
 let _acctTab = 'employees'; // current accounting sub-tab
 
 // Unit Sales module data (localStorage)
@@ -1375,7 +1380,7 @@ function showPortal() {
   document.getElementById('userDisplayRole').textContent = getRoleLabel(session.role);
   buildNav();
   loadAcctData();
-  switchView('dashboard');
+  switchView(session.role==='mama'?'mama-commissions':'dashboard');
   fetchFromSheets();
   startAutoSync();
   // PIN: if PIN is set, lock immediately on load; if not, ask to set one
@@ -1391,7 +1396,7 @@ function showPortal() {
 }
 
 function getRoleLabel(r) {
-  return r==='owner'?'👑 Owner':r==='admin'?'🛠️ Admin/Dispatcher':'👷 Technician';
+  return r==='owner'?'👑 Owner':r==='admin'?'🛠️ Admin/Dispatcher':r==='mama'?'📢 Marketing':'👷 Technician';
 }
 
 /** Returns "Name · Role Title" for use in PDF "Prepared by" lines */
@@ -1467,6 +1472,14 @@ function buildNav() {
     <div class="nav-item" data-tip="My Jobs" onclick="switchView('my-jobs',event)"><span class="ic">🔧</span><span class="nav-label">My Assigned Jobs</span></div>`;
   }
 
+  if (r==='mama') {
+    h = `<div class="nav-sec">My Dashboard</div>
+    <div class="nav-item" data-tip="Commissions" onclick="switchView('mama-commissions',event)"><span class="ic">💵</span><span class="nav-label">My Commissions</span></div>
+    <div class="nav-sec">Clients</div>
+    <div class="nav-item" data-tip="Clients" onclick="switchView('clients',event)"><span class="ic">👥</span><span class="nav-label">Client Records</span></div>
+    <div class="nav-item" data-tip="Follow-up Center" onclick="switchView('followup',event)"><span class="ic">🔔</span><span class="nav-label">Follow-up Center</span>${alertBadge}</div>`;
+  }
+
   const trashCount = Object.values(BOOKINGS).filter(b=>b.status==='Deleted').length;
   const trashBadge = trashCount>0 ? `<span class="nav-badge" style="background:var(--danger)">${trashCount}</span>` : '';
   const trashNavItems = isStaff ? `
@@ -1510,7 +1523,8 @@ function updatePageTitle(name) {
     clients:'Clients', schedule:'Schedule', complaints:'Complaints & Warranty',
     receipts:'Service Receipts', revenue:'Revenue', reports:'Reports & Charts',
     activity:'Activity Log', 'my-jobs':'My Assigned Jobs', settings:'Settings & Account',
-    trash:'🗑️ Trash', archive:'📦 Archive', followup:'Follow-up Center', accounting:'Accounting', unitsales:'Unit Sales'
+    trash:'🗑️ Trash', archive:'📦 Archive', followup:'Follow-up Center', accounting:'Accounting', unitsales:'Unit Sales',
+    'mama-commissions':'My Commissions'
   };
   document.getElementById('pageTitle').textContent = titles[name] || name;
 }
@@ -1534,6 +1548,7 @@ function renderView(name) {
     case 'archive': return renderArchive();
     case 'accounting': return renderAccounting();
     case 'unitsales': return renderUnitSales();
+    case 'mama-commissions': return renderMamaCommissions();
     default: return '<div class="empty"><div class="empty-ic">🚧</div>Coming soon</div>';
   }
 }
@@ -2093,6 +2108,17 @@ function openBookingDetail(id) {
         <input type="date" id="detNextClean" value="${b.nextCleaningDate||''}" onchange="" style="width:100%">
         <div style="font-size:10px;color:var(--text-dim);margin-top:3px">${b.nextCleaningDate?'':'Select usage frequency or set manually'}</div>
       </div>
+      <div class="field"><label>📢 Referred By</label>
+        <select id="detReferred">
+          <option value="">— None —</option>
+          <option value="mama-new" ${b.referredBy==='mama-new'?'selected':''}>Mama — New Client</option>
+          <option value="mama-repeat" ${b.referredBy==='mama-repeat'?'selected':''}>Mama — Repeat Client</option>
+          <option value="mama-followup" ${b.referredBy==='mama-followup'?'selected':''}>Mama — Follow-up Cleaning</option>
+          <option value="walk-in" ${b.referredBy==='walk-in'?'selected':''}>Walk-in / Direct</option>
+          <option value="website" ${b.referredBy==='website'?'selected':''}>Website Booking</option>
+          <option value="other" ${b.referredBy==='other'?'selected':''}>Other</option>
+        </select>
+      </div>
     </div>
     <div class="sec-divider" style="margin-top:12px">💰 Payment Breakdown</div>
     <div style="background:var(--bg-elev2);border-radius:10px;padding:14px;border:1px solid var(--border)">
@@ -2196,9 +2222,12 @@ function updateBooking(id) {
 
   const usage = document.getElementById('detUsage')?.value||'';
   const nextClean = document.getElementById('detNextClean')?.value||'';
+  const referred = document.getElementById('detReferred')?.value||'';
 
   if (tech) b.technician = tech;
+  var oldStatus = b.status;
   if (status) b.status = status;
+  if (referred !== undefined) b.referredBy = referred;
   if (notes !== undefined) b.notes = notes;
   if (usage) { b.usage = usage; if (!nextClean && b.date) b.nextCleaningDate = calcNextCleaning(b.date, usage); }
   if (nextClean) b.nextCleaningDate = nextClean;
@@ -2212,6 +2241,10 @@ function updateBooking(id) {
   b._dirty = true;
   saveLocalData();
   syncBookingToSheets(b);
+  // Auto-generate commission if booking marked Done with mama referral
+  if (status==='Done' && oldStatus!=='Done' && b.referredBy && b.referredBy.startsWith('mama-')) {
+    generateCommission(id);
+  }
   logActivity('✏️', `Updated booking ${id} — Status: ${status}, Tech: ${tech||b.technician}, Amount: ₱${amount.toLocaleString()}`, 'booking');
   addNotif(`Booking ${id} updated to ${status}`, 'info', id);
   closeModal('bookingModal');
@@ -4860,13 +4893,14 @@ function buildRevenueContent(from, to) {
   const expTableHtml = (function(){
     if (!periodExp.length) return '<div class="empty"><div class="empty-ic">💸</div><p>No expenses for this period. Click "Add Expense" to log one.</p></div>';
     const rows = periodExp.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(function(e){
+      var fundBadge = e.fundingSource==='Investor' ? '<span class="bc-tag" style="background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success);font-size:10px;margin-left:4px">💼 Investor</span>' : '';
       return '<tr>'
         +'<td style="font-size:12px">'+formatDate(e.date)+'</td>'
-        +'<td><span class="bc-tag" style="background:var(--danger-soft);color:var(--danger)">'+e.category+'</span></td>'
-        +'<td style="font-size:12px">'+(e.description||'—')+'</td>'
+        +'<td><span class="bc-tag" style="background:var(--danger-soft);color:var(--danger)">'+e.category+'</span>'+fundBadge+'</td>'
+        +'<td style="font-size:12px">'+(e.description||'—')+(e.relatedJobId?'<div style="font-size:10px;color:var(--accent)">🔗 '+e.relatedJobId+'</div>':'')+'</td>'
         +'<td style="font-weight:700;color:var(--danger)">₱'+parseFloat(e.amount||0).toLocaleString()+'</td>'
         +'<td style="font-size:11.5px;color:var(--text-dim)">'+(e.addedBy||'—')+'</td>'
-        +'<td><button class="btn btn-danger btn-xs" onclick="deleteExpense(\''+e.id+'\')">🗑️</button></td>'
+        +'<td><button class="btn btn-outline btn-xs" onclick="openAddExpense(\''+e.id+'\')" style="margin-right:4px">✏️</button><button class="btn btn-danger btn-xs" onclick="deleteExpense(\''+e.id+'\')">🗑️</button></td>'
         +'</tr>';
     }).join('');
     return '<div class="tbl-wrap"><table>'
@@ -4959,12 +4993,25 @@ function openAddExpense(editId) {
   const e = editId ? EXPENSES.find(x=>x.id===editId) : null;
   const today = new Date().toISOString().split('T')[0];
   document.getElementById('expModalTitle').textContent = e ? 'Edit Expense' : 'Add Expense';
+  var jobOptions = Object.values(BOOKINGS).filter(function(b){return b.id;}).sort(function(a,b){return (b.date||'').localeCompare(a.date||'');}).slice(0,50);
   document.getElementById('expModalBody').innerHTML = `
     <div class="form-grid">
       <div class="field"><label>Date *</label><input type="date" id="exp_date" value="${e?e.date:today}" max="${today}"></div>
       <div class="field"><label>Category *</label>
         <select id="exp_cat">
           ${OPEX_CATEGORIES.map(c=>`<option ${e&&e.category===c?'selected':''}>${c}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Funding Source *</label>
+        <select id="exp_fund">
+          <option value="Regular" ${e&&e.fundingSource==='Investor'?'':'selected'}>Regular (DJC Operations)</option>
+          <option value="Investor" ${e&&e.fundingSource==='Investor'?'selected':''}>Investor-Funded</option>
+        </select>
+      </div>
+      <div class="field"><label>Related Job</label>
+        <select id="exp_job">
+          <option value="">— None —</option>
+          ${jobOptions.map(function(b){return '<option value="'+b.id+'" '+(e&&e.relatedJobId===b.id?'selected':'')+'>'+b.id+' — '+(b.service||'?')+' ('+(b.client||b.name||'?')+')</option>';}).join('')}
         </select>
       </div>
       <div class="field form-full"><label>Description</label><input id="exp_desc" value="${e?e.description||'':''}" placeholder="e.g. Shell station - Bocaue run"></div>
@@ -4983,12 +5030,14 @@ function saveExpense(editId) {
   const amt  = document.getElementById('exp_amt')?.value;
   const desc = document.getElementById('exp_desc')?.value||'';
   const ref  = document.getElementById('exp_ref')?.value||'';
+  const fund = document.getElementById('exp_fund')?.value||'Regular';
+  const jobId= document.getElementById('exp_job')?.value||'';
   if (!date||!cat||!amt) { showToast('Fill in Date, Category, and Amount','error'); return; }
   if (editId) {
     const e = EXPENSES.find(x=>x.id===editId);
-    if (e) { Object.assign(e, {date,category:cat,amount:parseFloat(amt),description:desc,ref}); }
+    if (e) { Object.assign(e, {date,category:cat,amount:parseFloat(amt),description:desc,ref,fundingSource:fund,relatedJobId:jobId}); }
   } else {
-    const e = { id:'EXP-'+Date.now(), date, category:cat, amount:parseFloat(amt), description:desc, ref, addedBy:session?.name||'', createdAt:new Date().toISOString() };
+    const e = { id:'EXP-'+Date.now(), date, category:cat, amount:parseFloat(amt), description:desc, ref, fundingSource:fund, relatedJobId:jobId, addedBy:session?.name||'', createdAt:new Date().toISOString() };
     EXPENSES.push(e);
     syncExpenseToSheets(e);
   }
@@ -5831,6 +5880,12 @@ function loadAcctData() {
     ACCT_TARGETS   = JSON.parse(localStorage.getItem('djce_targets')||'{}');
     UNIT_PRODUCTS  = JSON.parse(localStorage.getItem('djce_unit_products')||'[]');
     UNIT_SALES     = JSON.parse(localStorage.getItem('djce_unit_sales')||'[]');
+    ACCT_COMMISSIONS = JSON.parse(localStorage.getItem('djce_commissions')||'[]');
+    var savedRates = JSON.parse(localStorage.getItem('djce_commission_rates')||'null');
+    if (savedRates) COMMISSION_RATES = savedRates;
+    ACCT_PETTY_CASH = JSON.parse(localStorage.getItem('djce_petty_cash')||'[]');
+    var savedPCConfig = JSON.parse(localStorage.getItem('djce_petty_cash_config')||'null');
+    if (savedPCConfig) PETTY_CASH_CONFIG = savedPCConfig;
   } catch(e) { console.warn('loadAcctData err', e); }
 }
 function saveAcctData() {
@@ -5843,6 +5898,10 @@ function saveAcctData() {
     localStorage.setItem('djce_targets',   JSON.stringify(ACCT_TARGETS));
     localStorage.setItem('djce_unit_products',JSON.stringify(UNIT_PRODUCTS));
     localStorage.setItem('djce_unit_sales',JSON.stringify(UNIT_SALES));
+    localStorage.setItem('djce_commissions',JSON.stringify(ACCT_COMMISSIONS));
+    localStorage.setItem('djce_commission_rates',JSON.stringify(COMMISSION_RATES));
+    localStorage.setItem('djce_petty_cash',JSON.stringify(ACCT_PETTY_CASH));
+    localStorage.setItem('djce_petty_cash_config',JSON.stringify(PETTY_CASH_CONFIG));
   } catch(e) { console.warn('saveAcctData err', e); }
 }
 
@@ -5857,7 +5916,9 @@ function renderAccounting() {
     {id:'payroll',   icon:'💵', label:'Payroll'},
     {id:'13th',      icon:'🎁', label:'13th Month'},
     {id:'investors', icon:'📊', label:'Investor Shares'},
-    {id:'targets',   icon:'🎯', label:'Targets & Salary'}
+    {id:'targets',   icon:'🎯', label:'Targets & Salary'},
+    {id:'commissions', icon:'💵', label:'Commissions'},
+    {id:'pettycash',   icon:'💰', label:'Petty Cash'}
   ];
   var tabBar = '<div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;overflow-x:auto;padding-bottom:4px">'
     +tabs.map(function(t){
@@ -5873,6 +5934,8 @@ function renderAccounting() {
     case '13th':      body = renderAcct13th(); break;
     case 'investors': body = renderAcctInvestors(); break;
     case 'targets':   body = renderAcctTargets(); break;
+    case 'commissions': body = renderAcctCommissions(); break;
+    case 'pettycash':   body = renderAcctPettyCash(); break;
     default: body = renderAcctEmployees();
   }
   return '<div style="margin-bottom:10px;font-size:12px;color:var(--text-dim)">🧮 Accounting & Payroll · <strong>Owner + Head Tech Access Only</strong></div>' + tabBar + body;
@@ -5895,6 +5958,8 @@ function renderAcctEmployees() {
           +'</div>'
           +'<div style="margin-top:10px;font-size:12px;display:flex;flex-wrap:wrap;gap:12px;color:var(--text-dim)">'
           +'<span>💰 ₱'+(parseFloat(e.dailyRate)||0).toLocaleString()+'/day</span>'
+          +(e.mealAllowance?'<span>🍽️ ₱'+(parseFloat(e.mealAllowance)||0).toLocaleString()+' meal</span>':'')
+          +(e.accountUsername?'<span>🔗 '+e.accountUsername+'</span>':'')
           +(e.notes?'<span>📝 '+e.notes+'</span>':'')
           +'</div>'
           +(e.bankName?'<div style="margin-top:8px;font-size:11.5px;color:var(--text-dim);border-top:1px solid var(--border);padding-top:8px">🏦 '+e.bankName+(e.accountNo?' · ****'+e.accountNo.slice(-4):'')+(e.accountName?' · '+e.accountName:'')+'</div>':'')
@@ -5918,6 +5983,10 @@ function openEditEmployee(editId) {
     +['fixed','commission','oncall','investor'].map(function(t){return '<option value="'+t+'" '+(e&&e.type===t?'selected':'')+'>'+t+'</option>';}).join('')
     +'</select></div>'
     +'<div class="field"><label>Daily Rate (₱)</label><input type="number" id="emp_rate" value="'+(e?e.dailyRate||'':'')+'" placeholder="0" min="0"></div>'
+    +'<div class="field"><label>Meal Allowance (₱/day)</label><input type="number" id="emp_meal" value="'+(e?e.mealAllowance||'':'')+'" placeholder="0" min="0"></div>'
+    +'<div class="field"><label>Linked Portal Account</label><select id="emp_username"><option value="">— None —</option>'
+    +Object.keys(USERS).map(function(u){var usr=USERS[u];return '<option value="'+u+'" '+(e&&e.accountUsername===u?'selected':'')+'>'+u+' ('+usr.name+' — '+usr.role+')</option>';}).join('')
+    +'</select></div>'
     +'<div class="field form-full"><label>Notes</label><input id="emp_notes" value="'+(e?e.notes||'':'')+'" placeholder="e.g. Saturdays only, family"></div>'
     +'<div class="field form-full" style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px"><label style="font-weight:700;color:var(--accent)">🏦 Bank / ATM Details</label></div>'
     +'<div class="field"><label>Bank Name</label><input id="emp_bank" value="'+(e?e.bankName||'':'')+'" placeholder="e.g. BDO, BPI, GCash"></div>'
@@ -5941,6 +6010,8 @@ function saveEmployee(editId) {
     role: role,
     type: document.getElementById('emp_type').value,
     dailyRate: parseFloat(document.getElementById('emp_rate').value)||0,
+    mealAllowance: parseFloat(document.getElementById('emp_meal').value)||0,
+    accountUsername: (document.getElementById('emp_username').value||'').trim(),
     notes: (document.getElementById('emp_notes').value||'').trim(),
     bankName: (document.getElementById('emp_bank').value||'').trim(),
     accountNo: (document.getElementById('emp_acctno').value||'').trim(),
@@ -6274,15 +6345,18 @@ function renderAcctPayroll() {
     var fullDays = logs.filter(function(l){return l.classification==='full';}).length;
     var otDays   = logs.filter(function(l){return l.classification==='ot';}).length;
     var rate = parseFloat(emp.dailyRate)||0;
-    var gross = (halfDays * rate * 0.5) + (fullDays * rate) + (otDays * rate * 1.5);
-    return {emp:emp, halfDays:halfDays, fullDays:fullDays, otDays:otDays, totalDays:logs.length, gross:gross};
+    var meal = parseFloat(emp.mealAllowance)||0;
+    var basePay = (halfDays * rate * 0.5) + (fullDays * rate) + (otDays * rate * 1.5);
+    var mealPay = (halfDays * meal * 0.5) + (fullDays * meal) + (otDays * meal);
+    var gross = basePay + mealPay;
+    return {emp:emp, halfDays:halfDays, fullDays:fullDays, otDays:otDays, totalDays:logs.length, gross:gross, basePay:basePay, mealPay:mealPay};
   });
 
   var totalGross = payRows.reduce(function(s,r){return s+r.gross;},0);
 
   var rowsHtml = payRows.map(function(r){
     return '<tr>'
-      +'<td><strong>'+r.emp.name+'</strong><div style="font-size:10.5px;color:var(--text-dim)">'+r.emp.role+' · ₱'+(parseFloat(r.emp.dailyRate)||0).toLocaleString()+'/day</div></td>'
+      +'<td><strong>'+r.emp.name+'</strong><div style="font-size:10.5px;color:var(--text-dim)">'+r.emp.role+' · ₱'+(parseFloat(r.emp.dailyRate)||0).toLocaleString()+'/day'+(r.mealPay>0?' + ₱'+r.mealPay.toLocaleString()+' meal':'')+'</div></td>'
       +'<td style="text-align:center">'+r.halfDays+'</td>'
       +'<td style="text-align:center">'+r.fullDays+'</td>'
       +'<td style="text-align:center">'+r.otDays+'</td>'
@@ -6317,7 +6391,10 @@ function openPayslipAcct(empId, pFrom, pTo) {
   var fullDays = logs.filter(function(l){return l.classification==='full';}).length;
   var otDays   = logs.filter(function(l){return l.classification==='ot';}).length;
   var rate = parseFloat(emp.dailyRate)||0;
-  var gross = (halfDays*rate*0.5)+(fullDays*rate)+(otDays*rate*1.5);
+  var meal = parseFloat(emp.mealAllowance)||0;
+  var basePay = (halfDays*rate*0.5)+(fullDays*rate)+(otDays*rate*1.5);
+  var mealPay = (halfDays*meal*0.5)+(fullDays*meal)+(otDays*meal);
+  var gross = basePay + mealPay;
 
   var periodLabel = formatDate(pFrom)+' – '+formatDate(pTo);
 
@@ -6331,6 +6408,7 @@ function openPayslipAcct(empId, pFrom, pTo) {
       <div class="field"><label>Employee Name</label><input id="ps_name" value="${emp.name}"></div>
       <div class="field"><label>Role</label><input id="ps_role" value="${emp.role}"></div>
       <div class="field"><label>Daily Rate</label><input id="ps_rate" type="number" value="${rate}"></div>
+      <div class="field"><label>Meal Allowance/day</label><input id="ps_meal" type="number" value="${meal}"></div>
       <div class="field"><label>Half Days (×0.5)</label><input id="ps_half" type="number" value="${halfDays}"></div>
       <div class="field"><label>Full Days (×1.0)</label><input id="ps_full" type="number" value="${fullDays}"></div>
       <div class="field"><label>OT Days (×1.5)</label><input id="ps_ot" type="number" value="${otDays}"></div>
@@ -6338,6 +6416,8 @@ function openPayslipAcct(empId, pFrom, pTo) {
       <div class="field"><label>Allowance / Bonus (₱)</label><input id="ps_bonus" type="number" value="0"></div>
     </div>
     <div style="margin-top:14px;padding:12px;background:var(--bg-elev2);border-radius:8px;font-size:13px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>Base Pay:</span><strong>₱${basePay.toLocaleString()}</strong></div>
+      ${mealPay>0?'<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>Meal Allowance:</span><strong>₱'+mealPay.toLocaleString()+'</strong></div>':''}
       <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>Gross Pay:</span><strong style="color:var(--accent)">₱${gross.toLocaleString()}</strong></div>
       <div style="font-size:11px;color:var(--text-dim)">All fields above are editable before downloading.</div>
     </div>`;
@@ -6358,10 +6438,11 @@ function renderAcct13th() {
         return l.employeeId===emp.id && l.date && l.date.startsWith(mStr) && l.classification;
       });
       var rate = parseFloat(emp.dailyRate)||0;
+      var meal = parseFloat(emp.mealAllowance)||0;
       var mGross = mLogs.reduce(function(s,l){
-        if (l.classification==='half') return s + rate*0.5;
-        if (l.classification==='full') return s + rate;
-        if (l.classification==='ot') return s + rate*1.5;
+        if (l.classification==='half') return s + rate*0.5 + meal*0.5;
+        if (l.classification==='full') return s + rate + meal;
+        if (l.classification==='ot') return s + rate*1.5 + meal;
         return s;
       }, 0);
       monthlyAmts.push(mGross);
@@ -6518,11 +6599,12 @@ function renderAcctTargets() {
     var mPayroll = 0;
     ACCT_EMPLOYEES.forEach(function(emp){
       var rate = parseFloat(emp.dailyRate)||0;
+      var meal = parseFloat(emp.mealAllowance)||0;
       var mLogs = ACCT_DAILY_LOG.filter(function(l){return l.employeeId===emp.id&&l.date&&l.date.startsWith(key)&&l.classification;});
       mLogs.forEach(function(l){
-        if(l.classification==='half') mPayroll+=rate*0.5;
-        else if(l.classification==='full') mPayroll+=rate;
-        else if(l.classification==='ot') mPayroll+=rate*1.5;
+        if(l.classification==='half') mPayroll+=rate*0.5+meal*0.5;
+        else if(l.classification==='full') mPayroll+=rate+meal;
+        else if(l.classification==='ot') mPayroll+=rate*1.5+meal;
       });
     });
     var netProfit = actual - mExp - mPayroll;
@@ -6578,19 +6660,20 @@ function renderAcctTargets() {
   var totalGrossYTD = 0;
   ACCT_EMPLOYEES.forEach(function(emp){
     var rate = parseFloat(emp.dailyRate)||0;
+    var meal = parseFloat(emp.mealAllowance)||0;
     var logs = ACCT_DAILY_LOG.filter(function(l){
       return l.employeeId===emp.id && l.date && l.date.startsWith(String(yr)) && l.classification;
     });
     var gross = 0;
     logs.forEach(function(l){
-      if(l.classification==='half') gross+=rate*0.5;
-      else if(l.classification==='full') gross+=rate;
-      else if(l.classification==='ot') gross+=rate*1.5;
+      if(l.classification==='half') gross+=rate*0.5+meal*0.5;
+      else if(l.classification==='full') gross+=rate+meal;
+      else if(l.classification==='ot') gross+=rate*1.5+meal;
     });
     var avgMo = curMo > 0 ? Math.round(gross/curMo) : 0;
     totalGrossYTD += gross;
     salaryHtml += '<tr><td><strong>'+emp.name+'</strong><div style="font-size:10.5px;color:var(--text-dim)">'+emp.role+' · '+emp.type+'</div></td>'
-      +'<td style="text-align:right">₱'+rate.toLocaleString()+'</td>'
+      +'<td style="text-align:right">₱'+rate.toLocaleString()+(meal>0?' + ₱'+meal.toLocaleString()+' meal':'')+'</td>'
       +'<td style="text-align:center">'+logs.length+'</td>'
       +'<td style="text-align:right;font-weight:700;color:var(--accent)">₱'+Math.round(gross).toLocaleString()+'</td>'
       +'<td style="text-align:right;color:var(--text-dim)">₱'+avgMo.toLocaleString()+'</td>'
@@ -6640,6 +6723,298 @@ function saveMonthlyTargets() {
   saveAcctData();
   showToast('Monthly targets saved','success');
   logActivity('🎯','Updated monthly revenue targets','accounting');
+}
+
+/* ===========================
+   MAMA COMMISSIONS DASHBOARD
+=========================== */
+function renderMamaCommissions() {
+  var now = new Date();
+  var curMonth = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+
+  // Only show approved commissions for the current month
+  var monthCommissions = ACCT_COMMISSIONS.filter(function(c){
+    return c.status==='approved' && c.month===curMonth;
+  });
+
+  var totalComm = monthCommissions.reduce(function(s,c){return s+(parseFloat(c.amount)||0);},0);
+  var newClients = monthCommissions.filter(function(c){return c.type==='new';});
+  var repeatClients = monthCommissions.filter(function(c){return c.type==='repeat';});
+  var followUpClients = monthCommissions.filter(function(c){return c.type==='follow-up';});
+
+  var rowsHtml = '';
+  if (!monthCommissions.length) {
+    rowsHtml = '<div class="empty" style="padding:24px"><div class="empty-ic">💵</div><p>No approved commissions for this month yet.</p><p style="font-size:12px;color:var(--text-dim)">Commissions will appear here once the owner approves completed services you referred.</p></div>';
+  } else {
+    rowsHtml = '<div class="tbl-wrap"><table><thead><tr><th>Booking</th><th>Client</th><th>Type</th><th style="text-align:right">Service Amount</th><th style="text-align:right">Rate</th><th style="text-align:right;color:var(--accent)">Commission</th><th>Approved</th></tr></thead><tbody>'
+      +monthCommissions.map(function(c){
+        var bk = BOOKINGS[c.bookingId] || {};
+        var typeBadge = c.type==='new'?'🆕 New Client':c.type==='repeat'?'🔄 Repeat':'🔔 Follow-up';
+        var typeColor = c.type==='new'?'var(--success)':c.type==='repeat'?'var(--info)':'var(--warning)';
+        return '<tr>'
+          +'<td style="font-family:monospace;font-size:11px">'+(c.bookingId||'—')+'</td>'
+          +'<td>'+(bk.client||bk.name||'—')+'</td>'
+          +'<td><span class="bc-tag" style="background:color-mix(in srgb,'+typeColor+' 15%,transparent);color:'+typeColor+'">'+typeBadge+'</span></td>'
+          +'<td style="text-align:right">₱'+(parseFloat(c.grossProfit)||0).toLocaleString()+'</td>'
+          +'<td style="text-align:right">'+(parseFloat(c.rate)||0)+'%</td>'
+          +'<td style="text-align:right;font-weight:700;color:var(--accent)">₱'+(parseFloat(c.amount)||0).toLocaleString()+'</td>'
+          +'<td style="font-size:11.5px;color:var(--text-dim)">'+(c.approvedDate?formatDate(c.approvedDate):'—')+'</td>'
+          +'</tr>';
+      }).join('')
+      +'<tr style="font-weight:700;border-top:2px solid var(--border)"><td colspan="5" style="text-align:right">TOTAL COMMISSIONS</td><td style="text-align:right;color:var(--accent);font-size:15px">₱'+totalComm.toLocaleString()+'</td><td></td></tr>'
+      +'</tbody></table></div>';
+  }
+
+  var moLabel = now.toLocaleString('default',{month:'long',year:'numeric'});
+
+  return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:16px">'
+    +'<div class="stat-card stat-gold"><div class="stat-icon">💵</div><div class="stat-label">Total Commission</div><div class="stat-value" style="color:var(--accent);font-size:20px">₱'+totalComm.toLocaleString()+'</div></div>'
+    +'<div class="stat-card stat-success"><div class="stat-icon">🆕</div><div class="stat-label">New Clients</div><div class="stat-value">'+newClients.length+'</div><div class="stat-sub">₱'+newClients.reduce(function(s,c){return s+(parseFloat(c.amount)||0);},0).toLocaleString()+'</div></div>'
+    +'<div class="stat-card stat-info"><div class="stat-icon">🔄</div><div class="stat-label">Repeat Clients</div><div class="stat-value">'+repeatClients.length+'</div><div class="stat-sub">₱'+repeatClients.reduce(function(s,c){return s+(parseFloat(c.amount)||0);},0).toLocaleString()+'</div></div>'
+    +'<div class="stat-card stat-warning"><div class="stat-icon">🔔</div><div class="stat-label">Follow-up Cleaning</div><div class="stat-value">'+followUpClients.length+'</div><div class="stat-sub">₱'+followUpClients.reduce(function(s,c){return s+(parseFloat(c.amount)||0);},0).toLocaleString()+'</div></div>'
+    +'</div>'
+    +'<div class="panel"><div class="panel-head"><div class="panel-title">💵 My Commissions — '+moLabel+' (Approved Only)</div></div>'
+    +'<div class="panel-body">'+rowsHtml+'</div></div>'
+    +'<div style="font-size:11px;color:var(--text-dim);padding:8px 12px;background:var(--bg-elev2);border-radius:8px;margin-top:12px">💡 Commissions reflect only after the owner approves successfully completed services.</div>';
+}
+
+// ─── COMMISSION MANAGEMENT ─────────────────────────
+function generateCommission(bookingId) {
+  var b = BOOKINGS[bookingId];
+  if (!b || !b.referredBy || !b.referredBy.startsWith('mama-')) return;
+  // Don't duplicate
+  if (ACCT_COMMISSIONS.find(function(c){return c.bookingId===bookingId;})) return;
+
+  var grossProfit = parseFloat(b.amount)||0;
+  var type, rate;
+  if (b.referredBy==='mama-new') { type = 'new'; rate = COMMISSION_RATES.newClient; }
+  else if (b.referredBy==='mama-repeat') { type = 'repeat'; rate = COMMISSION_RATES.repeatClient; }
+  else if (b.referredBy==='mama-followup') { type = 'follow-up'; rate = COMMISSION_RATES.followUpCleaning; }
+  else return;
+
+  var commAmount = Math.round(grossProfit * (rate/100) * 100) / 100;
+  var dateObj = b.date ? new Date(b.date) : new Date();
+  var month = dateObj.getFullYear()+'-'+String(dateObj.getMonth()+1).padStart(2,'0');
+
+  ACCT_COMMISSIONS.push({
+    id: 'COMM-'+Date.now(),
+    bookingId: bookingId,
+    referredBy: 'Mama',
+    type: type,
+    grossProfit: grossProfit,
+    rate: rate,
+    amount: commAmount,
+    status: 'pending',
+    approvedDate: '',
+    month: month
+  });
+  saveAcctData();
+  logActivity('💵', 'Commission generated for '+bookingId+': ₱'+commAmount.toLocaleString()+' ('+type+', '+rate+'%)', 'commission');
+}
+
+function approveCommission(commId) {
+  var c = ACCT_COMMISSIONS.find(function(x){return x.id===commId;});
+  if (!c) return;
+  c.status = 'approved';
+  c.approvedDate = new Date().toISOString().split('T')[0];
+  saveAcctData();
+  showToast('Commission approved ✅','success');
+  logActivity('✅', 'Approved commission '+commId+': ₱'+(parseFloat(c.amount)||0).toLocaleString(), 'commission');
+  switchView('accounting');
+}
+
+function rejectCommission(commId) {
+  if (!confirm('Reject this commission?')) return;
+  ACCT_COMMISSIONS = ACCT_COMMISSIONS.filter(function(x){return x.id!==commId;});
+  saveAcctData();
+  showToast('Commission removed','info');
+  switchView('accounting');
+}
+
+function saveCommissionRates() {
+  var n = parseFloat(document.getElementById('cr_new').value);
+  var r = parseFloat(document.getElementById('cr_repeat').value);
+  var f = parseFloat(document.getElementById('cr_followup').value);
+  if (isNaN(n)||isNaN(r)||isNaN(f)||n<0||r<0||f<0||n>100||r>100||f>100) { showToast('Enter valid percentages (0–100)','error'); return; }
+  COMMISSION_RATES = { newClient: n, repeatClient: r, followUpCleaning: f };
+  localStorage.setItem('djce_commission_rates', JSON.stringify(COMMISSION_RATES));
+  showToast('Commission rates saved!','success');
+}
+
+function savePettyCashConfig() {
+  var a = parseFloat(document.getElementById('pc_alloc').value);
+  if (isNaN(a)||a<0) { showToast('Enter a valid amount','error'); return; }
+  PETTY_CASH_CONFIG.monthlyAllocation = a;
+  localStorage.setItem('djce_petty_cash_config', JSON.stringify(PETTY_CASH_CONFIG));
+  showToast('Petty cash budget updated!','success');
+}
+
+function renderAcctCommissions() {
+  var pending = ACCT_COMMISSIONS.filter(function(c){return c.status==='pending';});
+  var approved = ACCT_COMMISSIONS.filter(function(c){return c.status==='approved';});
+
+  var pendingHtml = '';
+  if (!pending.length) {
+    pendingHtml = '<div class="empty" style="padding:16px"><div class="empty-ic">✅</div>No pending commissions</div>';
+  } else {
+    pendingHtml = '<div class="tbl-wrap"><table><thead><tr><th>Booking</th><th>Client</th><th>Type</th><th style="text-align:right">Service Amt</th><th style="text-align:right">Rate</th><th style="text-align:right">Commission</th><th>Actions</th></tr></thead><tbody>'
+      +pending.map(function(c){
+        var bk = BOOKINGS[c.bookingId]||{};
+        var typeBadge = c.type==='new'?'🆕 New':c.type==='repeat'?'🔄 Repeat':'🔔 Follow-up';
+        return '<tr>'
+          +'<td style="font-family:monospace;font-size:11px">'+(c.bookingId||'')+'</td>'
+          +'<td>'+(bk.client||bk.name||'—')+'</td>'
+          +'<td>'+typeBadge+'</td>'
+          +'<td style="text-align:right">₱'+(parseFloat(c.grossProfit)||0).toLocaleString()+'</td>'
+          +'<td style="text-align:right">'+c.rate+'%</td>'
+          +'<td style="text-align:right;font-weight:700;color:var(--accent)">₱'+(parseFloat(c.amount)||0).toLocaleString()+'</td>'
+          +'<td><button class="btn btn-gold btn-xs" onclick="approveCommission(\''+c.id+'\')">✅ Approve</button> <button class="btn btn-danger btn-xs" onclick="rejectCommission(\''+c.id+'\')">❌</button></td>'
+          +'</tr>';
+      }).join('')+'</tbody></table></div>';
+  }
+
+  var now = new Date();
+  var curMonth = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  var monthApproved = approved.filter(function(c){return c.month===curMonth;});
+  var monthTotal = monthApproved.reduce(function(s,c){return s+(parseFloat(c.amount)||0);},0);
+
+  return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:16px">'
+    +'<div class="stat-card stat-warning"><div class="stat-icon">⏳</div><div class="stat-label">Pending</div><div class="stat-value">'+pending.length+'</div></div>'
+    +'<div class="stat-card stat-gold"><div class="stat-icon">💵</div><div class="stat-label">This Month</div><div class="stat-value" style="font-size:16px">₱'+monthTotal.toLocaleString()+'</div></div>'
+    +'<div class="stat-card stat-success"><div class="stat-icon">✅</div><div class="stat-label">Total Approved</div><div class="stat-value">'+approved.length+'</div></div>'
+    +'</div>'
+    +'<div class="panel"><div class="panel-head"><div class="panel-title">⏳ Pending Commission Approvals</div></div><div class="panel-body">'+pendingHtml+'</div></div>'
+    +'<div style="margin-top:12px;font-size:11px;color:var(--text-dim);padding:8px 12px;background:var(--bg-elev2);border-radius:8px">💡 Commissions are auto-generated when a booking with a Mama referral is marked Done. Approve here for Mama to see them.</div>';
+}
+
+/* ===========================
+   PETTY CASH MODULE
+=========================== */
+function getPettyCashMonth(ym) {
+  if (!ym) { var d=new Date(); ym=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+  var alloc = PETTY_CASH_CONFIG.monthlyAllocation||5000;
+  var entries = ACCT_PETTY_CASH.filter(function(e){return e.month===ym;});
+  var released = entries.filter(function(e){return e.type==='release';}).reduce(function(s,e){return s+(parseFloat(e.amount)||0);},0);
+  var liquidated = entries.filter(function(e){return e.type==='liquidation';}).reduce(function(s,e){return s+(parseFloat(e.amount)||0);},0);
+  var replenished = entries.filter(function(e){return e.type==='replenish';}).reduce(function(s,e){return s+(parseFloat(e.amount)||0);},0);
+  var balance = alloc + replenished - released;
+  var unspent = released - liquidated;
+  return {ym:ym, alloc:alloc, released:released, liquidated:liquidated, replenished:replenished, balance:balance, unspent:unspent, entries:entries};
+}
+
+function renderAcctPettyCash() {
+  var now = new Date();
+  var curYM = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  var pc = getPettyCashMonth(curYM);
+  var monthLabel = new Date(curYM+'-01').toLocaleDateString('en-PH',{month:'long',year:'numeric'});
+
+  // Stat cards
+  var stats = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:16px">'
+    +'<div class="stat-card stat-gold"><div class="stat-icon">💰</div><div class="stat-label">Monthly Budget</div><div class="stat-value" style="font-size:16px">₱'+pc.alloc.toLocaleString()+'</div></div>'
+    +'<div class="stat-card stat-warning"><div class="stat-icon">📤</div><div class="stat-label">Released</div><div class="stat-value" style="font-size:16px">₱'+pc.released.toLocaleString()+'</div></div>'
+    +'<div class="stat-card stat-success"><div class="stat-icon">🧾</div><div class="stat-label">Liquidated</div><div class="stat-value" style="font-size:16px">₱'+pc.liquidated.toLocaleString()+'</div></div>'
+    +'<div class="stat-card '+(pc.balance<500?'stat-danger':'stat-info')+'"><div class="stat-icon">💵</div><div class="stat-label">Remaining</div><div class="stat-value" style="font-size:16px">₱'+pc.balance.toLocaleString()+'</div></div>'
+    +'</div>';
+
+  // Transactions table
+  var txHtml = '';
+  if (!pc.entries.length) {
+    txHtml = '<div class="empty" style="padding:18px"><div class="empty-ic">💰</div>No petty cash transactions for '+monthLabel+'</div>';
+  } else {
+    var sorted = pc.entries.slice().sort(function(a,b){return (b.date||'').localeCompare(a.date||'');});
+    txHtml = '<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Category</th><th style="text-align:right">Amount</th><th>Receipt</th><th></th></tr></thead><tbody>'
+      +sorted.map(function(e){
+        var typeBadge = e.type==='release'?'<span class="bc-tag" style="background:var(--warning-soft);color:var(--warning)">📤 Release</span>'
+          :e.type==='liquidation'?'<span class="bc-tag" style="background:var(--success-soft);color:var(--success)">🧾 Liquidation</span>'
+          :'<span class="bc-tag" style="background:var(--info-soft);color:var(--info)">🔄 Replenish</span>';
+        return '<tr>'
+          +'<td>'+formatDate(e.date)+'</td>'
+          +'<td>'+typeBadge+'</td>'
+          +'<td style="max-width:180px">'+((e.description||'—').length>40?(e.description||'').substring(0,40)+'…':(e.description||'—'))+'</td>'
+          +'<td>'+(e.category||'—')+'</td>'
+          +'<td style="text-align:right;font-weight:700;color:'+(e.type==='release'?'var(--danger)':'var(--success)')+'">₱'+(parseFloat(e.amount)||0).toLocaleString()+'</td>'
+          +'<td>'+(e.receiptRef?'📎 '+e.receiptRef:'—')+'</td>'
+          +'<td><button class="btn btn-danger btn-xs" onclick="deletePettyCash(\''+e.id+'\')">🗑️</button></td>'
+          +'</tr>';
+      }).join('')+'</tbody></table></div>';
+  }
+
+  // Unspent/unliquidated warning
+  var unliqNote = '';
+  if (pc.unspent > 0) {
+    unliqNote = '<div class="alert-banner alert-warning" style="margin-top:12px">⚠️ ₱'+pc.unspent.toLocaleString()+' released but not yet liquidated (receipts pending). Unliquidated funds should be returned or supported with receipts before month-end.</div>';
+  }
+
+  return stats
+    +'<div class="panel"><div class="panel-head"><div class="panel-title">💰 Petty Cash — '+monthLabel+'</div>'
+    +'<div style="display:flex;gap:6px"><button class="btn btn-gold btn-sm" onclick="openAddPettyCash(\'release\')">📤 Release</button>'
+    +'<button class="btn btn-primary btn-sm" onclick="openAddPettyCash(\'liquidation\')">🧾 Liquidate</button>'
+    +'<button class="btn btn-outline btn-sm" onclick="openAddPettyCash(\'replenish\')">🔄 Replenish</button></div>'
+    +'</div><div class="panel-body">'+txHtml+unliqNote+'</div></div>'
+    +'<div style="margin-top:12px;font-size:11px;color:var(--text-dim);padding:8px 12px;background:var(--bg-elev2);border-radius:8px">'
+    +'💡 Monthly budget: ₱'+pc.alloc.toLocaleString()+'. Releases reduce the balance. Liquidations record actual spending with receipts. Unused released funds should be returned at month-end. Configure the monthly allocation in Settings (owner only).</div>';
+}
+
+function openAddPettyCash(type) {
+  var title = type==='release'?'📤 Release Petty Cash':type==='liquidation'?'🧾 Liquidate (Record Spending)':'🔄 Replenish Petty Cash';
+  var catOpts = ['Gas / Fuel','Tricycle / Transport','Food','Parts & Materials','Tools & Equipment','Office Supplies','Printing','Other'].map(function(c){return '<option>'+c+'</option>';}).join('');
+  var today = new Date().toISOString().split('T')[0];
+  var jobOptions = Object.values(BOOKINGS).filter(function(b){return b.id;}).sort(function(a,b){return (b.date||'').localeCompare(a.date||'');}).slice(0,50);
+
+  showModal(title,
+    '<div class="form-grid">'
+    +'<div class="field"><label>Date</label><input type="date" id="pc_date" value="'+today+'" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"></div>'
+    +'<div class="field"><label>Amount (₱)</label><input type="number" id="pc_amount" placeholder="0" min="0" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"></div>'
+    +(type==='liquidation'?'<div class="field"><label>Category</label><select id="pc_cat" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"><option value="">— Select —</option>'+catOpts+'</select></div>':'')
+    +'<div class="field"><label>Description</label><input type="text" id="pc_desc" placeholder="What is this for?" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"></div>'
+    +(type==='liquidation'?'<div class="field"><label>Receipt / OR #</label><input type="text" id="pc_receipt" placeholder="Receipt ref (optional)" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"></div>':'')
+    +(type==='liquidation'?'<div class="field"><label>Related Job</label><select id="pc_job" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"><option value="">— None —</option>'+jobOptions.map(function(j){return '<option value="'+j.id+'">'+(j.refNo||j.id)+' — '+(j.client||j.name||'')+'</option>';}).join('')+'</select></div>':'')
+    +'</div>'
+    +'<button class="btn btn-gold btn-sm" style="margin-top:12px" onclick="savePettyCash(\''+type+'\')">💾 Save</button>',
+  '480px');
+}
+
+function savePettyCash(type) {
+  var date = document.getElementById('pc_date').value;
+  var amount = parseFloat(document.getElementById('pc_amount').value);
+  var desc = (document.getElementById('pc_desc').value||'').trim();
+  if (!date||!amount||amount<=0) { showToast('Enter a valid date and amount','error'); return; }
+  if (!desc) { showToast('Please enter a description','error'); return; }
+
+  var dateObj = new Date(date);
+  var month = dateObj.getFullYear()+'-'+String(dateObj.getMonth()+1).padStart(2,'0');
+
+  // Check balance if release
+  if (type==='release') {
+    var pc = getPettyCashMonth(month);
+    if (amount > pc.balance) { showToast('Amount exceeds remaining balance (₱'+pc.balance.toLocaleString()+')','error'); return; }
+  }
+
+  var entry = {
+    id: 'PC-'+Date.now(),
+    date: date,
+    type: type,
+    amount: amount,
+    description: desc,
+    receiptRef: (document.getElementById('pc_receipt')||{}).value||'',
+    relatedJobId: (document.getElementById('pc_job')||{}).value||'',
+    category: (document.getElementById('pc_cat')||{}).value||'',
+    month: month
+  };
+  ACCT_PETTY_CASH.push(entry);
+  saveAcctData();
+  closeModal();
+  showToast(type==='release'?'Petty cash released':'Petty cash '+type+' recorded','success');
+  logActivity('💰','Petty cash '+type+': ₱'+amount.toLocaleString()+' — '+desc,'finance');
+  switchView('accounting');
+}
+
+function deletePettyCash(id) {
+  if (!confirm('Delete this petty cash entry?')) return;
+  ACCT_PETTY_CASH = ACCT_PETTY_CASH.filter(function(e){return e.id!==id;});
+  saveAcctData();
+  showToast('Entry deleted','info');
+  switchView('accounting');
 }
 
 /* ===========================
@@ -7492,7 +7867,7 @@ async function fetchFromSheets() {
         if (!id) return;
         e.id = id;
         if (!EXPENSES.find(x => x.id === id)) {
-          EXPENSES.push({ id, date:e.date||'', category:e.category||'', description:e.description||'', amount:parseFloat(e.amount||0), ref:e.refNo||'', addedBy:e.addedBy||'', createdAt:e.createdAt||'' });
+          EXPENSES.push({ id, date:e.date||'', category:e.category||'', description:e.description||'', amount:parseFloat(e.amount||0), ref:e.refNo||'', fundingSource:e.fundingSource||'Regular', relatedJobId:e.relatedJobId||'', addedBy:e.addedBy||'', createdAt:e.createdAt||'' });
         }
       });
     }
@@ -8244,6 +8619,29 @@ function renderSettings(){
         <div>👑 Only the <strong>Owner</strong> can add/remove accounts</div>
       </div>
     </div>
+
+    ${isOwner ? `
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">💵 Commission Rates</div><div class="panel-subtitle">Mama's referral commission percentages (of gross profit)</div></div>
+      <div class="panel-body">
+        <div class="form-grid">
+          <div class="field"><label>New Client (%)</label><input type="number" id="cr_new" value="${COMMISSION_RATES.newClient}" min="0" max="100" step="0.5" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"></div>
+          <div class="field"><label>Repeat Client (%)</label><input type="number" id="cr_repeat" value="${COMMISSION_RATES.repeatClient}" min="0" max="100" step="0.5" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"></div>
+          <div class="field"><label>Follow-up Cleaning (%)</label><input type="number" id="cr_followup" value="${COMMISSION_RATES.followUpCleaning}" min="0" max="100" step="0.5" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"></div>
+        </div>
+        <button class="btn btn-gold btn-sm" onclick="saveCommissionRates()">💾 Save Rates</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">💰 Petty Cash Budget</div><div class="panel-subtitle">Monthly petty cash allocation</div></div>
+      <div class="panel-body">
+        <div class="form-grid">
+          <div class="field"><label>Monthly Allocation (₱)</label><input type="number" id="pc_alloc" value="${PETTY_CASH_CONFIG.monthlyAllocation}" min="0" step="500" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"></div>
+        </div>
+        <button class="btn btn-gold btn-sm" onclick="savePettyCashConfig()">💾 Save</button>
+      </div>
+    </div>
+    ` : ''}
 
     ${(session.role==='owner'||session.role==='admin') ? renderServiceCatalog() : ''}
   </div>`;
