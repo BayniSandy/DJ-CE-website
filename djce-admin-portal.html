@@ -8821,15 +8821,15 @@ function closeSidebar() {
 =========================== */
 function openModal(id) { document.getElementById(id)?.classList.add('active'); }
 function closeModal(id) {
-  if (id) { document.getElementById(id)?.classList.remove('active'); }
-  else { document.getElementById('expenseModal')?.classList.remove('active'); }
+  var el = document.getElementById(id || 'expenseModal');
+  if (el) { el.classList.remove('active'); var mc = el.querySelector('.modal'); if (mc) mc.style.maxWidth = ''; }
 }
 function showModal(title, bodyHtml, width) {
   document.getElementById('expModalTitle').textContent = '';
   document.getElementById('expModalTitle').innerHTML = title;
   document.getElementById('expModalBody').innerHTML = bodyHtml;
   document.getElementById('expModalFoot').innerHTML = '<button class="btn btn-outline btn-sm" onclick="closeModal(\'expenseModal\')">Close</button>';
-  if (width) document.querySelector('#expenseModal .modal-card').style.maxWidth = width;
+  if (width) { var mc = document.querySelector('#expenseModal .modal'); if (mc) mc.style.maxWidth = width; }
   openModal('expenseModal');
 }
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.querySelectorAll('.modal-bg.active').forEach(m=>m.classList.remove('active')); });
