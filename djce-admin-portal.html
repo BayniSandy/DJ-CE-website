@@ -1171,6 +1171,9 @@ let COMMISSION_RATES = { newClient: 3, repeatClient: 2, followUpCleaning: 3 }; /
 let ACCT_PETTY_CASH = []; // { id, date, type:'release'|'liquidation'|'replenish', amount, description, receiptRef, relatedJobId, category, month }
 let PETTY_CASH_CONFIG = { monthlyAllocation: 5000 }; // configurable monthly petty cash budget
 let OWNER_FUND_PIN = ''; // owner's fund-release PIN (stored in localStorage)
+let PROFIT_SPLIT = { investorPct: 30, businessPct: 70 }; // configurable investor/business profit split
+let EXPANSION_FUND = []; // { id, date, type:'deposit'|'withdrawal', amount, description, source:'profit_share'|'manual' }
+let INVESTOR_DISTRIBUTIONS = []; // { id, investorId, period, amount, type:'provisional'|'actual', status:'pending'|'released', date, notes }
 let _acctTab = 'employees'; // current accounting sub-tab
 
 // Unit Sales module data (localStorage)
@@ -1526,7 +1529,8 @@ function updatePageTitle(name) {
     receipts:'Service Receipts', revenue:'Revenue', reports:'Reports & Charts',
     activity:'Activity Log', 'my-jobs':'My Assigned Jobs', settings:'Settings & Account',
     trash:'🗑️ Trash', archive:'📦 Archive', followup:'Follow-up Center', accounting:'Accounting', unitsales:'Unit Sales',
-    'mama-commissions':'My Commissions'
+    'mama-commissions':'My Commissions',
+    'investor-dashboard':'Investor Dashboard'
   };
   document.getElementById('pageTitle').textContent = titles[name] || name;
 }
@@ -1551,6 +1555,7 @@ function renderView(name) {
     case 'accounting': return renderAccounting();
     case 'unitsales': return renderUnitSales();
     case 'mama-commissions': return renderMamaCommissions();
+    case 'investor-dashboard': return renderInvestorDashboard();
     default: return '<div class="empty"><div class="empty-ic">🚧</div>Coming soon</div>';
   }
 }
@@ -6050,6 +6055,10 @@ function loadAcctData() {
     var savedPCConfig = JSON.parse(localStorage.getItem('djce_petty_cash_config')||'null');
     if (savedPCConfig) PETTY_CASH_CONFIG = savedPCConfig;
     INVESTOR_DEPOSITS = JSON.parse(localStorage.getItem('djce_investor_deposits')||'[]');
+    var savedSplit = JSON.parse(localStorage.getItem('djce_profit_split')||'null');
+    if (savedSplit) PROFIT_SPLIT = savedSplit;
+    EXPANSION_FUND = JSON.parse(localStorage.getItem('djce_expansion_fund')||'[]');
+    INVESTOR_DISTRIBUTIONS = JSON.parse(localStorage.getItem('djce_investor_distributions')||'[]');
   } catch(e) { console.warn('loadAcctData err', e); }
 }
 function saveAcctData() {
@@ -6067,6 +6076,9 @@ function saveAcctData() {
     localStorage.setItem('djce_petty_cash',JSON.stringify(ACCT_PETTY_CASH));
     localStorage.setItem('djce_petty_cash_config',JSON.stringify(PETTY_CASH_CONFIG));
     localStorage.setItem('djce_investor_deposits',JSON.stringify(INVESTOR_DEPOSITS));
+    localStorage.setItem('djce_profit_split',JSON.stringify(PROFIT_SPLIT));
+    localStorage.setItem('djce_expansion_fund',JSON.stringify(EXPANSION_FUND));
+    localStorage.setItem('djce_investor_distributions',JSON.stringify(INVESTOR_DISTRIBUTIONS));
   } catch(e) { console.warn('saveAcctData err', e); }
 }
 
@@ -6714,7 +6726,8 @@ function renderAcctInvestors() {
       }).join('')+'</tbody></table></div>';
   }
 
-  return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:16px">'
+  return '<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn btn-outline btn-sm" onclick="switchView(\'investor-dashboard\')">📊 Investor Dashboard Preview</button></div>'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:16px">'
     +'<div class="stat-card stat-gold"><div class="stat-icon">🏦</div><div class="stat-label">Total Capital</div><div class="stat-value" style="font-size:16px">₱'+totalCapital.toLocaleString()+'</div></div>'
     +'<div class="stat-card stat-info"><div class="stat-icon">📦</div><div class="stat-label">Inv. Inventory</div><div class="stat-value" style="font-size:16px">₱'+invInventoryValue.toLocaleString()+'</div></div>'
     +'<div class="stat-card stat-success"><div class="stat-icon">🧾</div><div class="stat-label">Inv. Revenue</div><div class="stat-value" style="font-size:16px">₱'+invRevenue.toLocaleString()+'</div></div>'
@@ -6730,7 +6743,256 @@ function renderAcctInvestors() {
     +'<div class="panel-body">'
     +'<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">Based on annual Net Profit from <strong>regular DJC services</strong>. Monthly Ipon = Annual Share ÷ 12. Investor-funded operations tracked separately above.</div>'
     +invHtml
+    +'</div></div>'
+    +buildProfitAllocationPanel(yr, yrFrom, yrTo, invGrossProfit)
+    +buildExpansionFundPanel()
+    +buildDistributionsPanel(yr);
+}
+
+function buildProfitAllocationPanel(yr, yrFrom, yrTo, invGrossProfit) {
+  var invPct = PROFIT_SPLIT.investorPct;
+  var bizPct = PROFIT_SPLIT.businessPct;
+  var profit = invGrossProfit > 0 ? invGrossProfit : 0;
+  var investorShare = Math.round(profit * invPct / 100);
+  var businessShare = Math.round(profit * bizPct / 100);
+
+  // Check if year is complete for actual vs provisional
+  var now = new Date();
+  var isCurrentYear = (now.getFullYear() === parseInt(yr));
+  var statusLabel = isCurrentYear ? 'Provisional (YTD)' : 'Actual (Final)';
+  var statusColor = isCurrentYear ? 'var(--warning)' : 'var(--success)';
+
+  // Per-investor allocation
+  var allocHtml = '';
+  if (ACCT_INVESTORS.length && profit > 0) {
+    allocHtml = '<div class="tbl-wrap"><table><thead><tr><th>Investor</th><th style="text-align:right">Share %</th><th style="text-align:right">Allocated</th><th style="text-align:right">Released YTD</th><th style="text-align:right">Remaining</th></tr></thead><tbody>';
+    ACCT_INVESTORS.forEach(function(inv) {
+      var pct = parseFloat(inv.percentage) || 0;
+      var allocated = Math.round(investorShare * pct / 100);
+      var released = INVESTOR_DISTRIBUTIONS.filter(function(d){return d.investorId===inv.id && d.status==='released' && d.period && d.period.startsWith(yr);}).reduce(function(s,d){return s+(parseFloat(d.amount)||0);},0);
+      var remaining = allocated - released;
+      allocHtml += '<tr><td><strong>'+inv.name+'</strong></td>'
+        +'<td style="text-align:right">'+pct+'%</td>'
+        +'<td style="text-align:right;color:var(--accent);font-weight:700">₱'+allocated.toLocaleString()+'</td>'
+        +'<td style="text-align:right;color:var(--success)">₱'+released.toLocaleString()+'</td>'
+        +'<td style="text-align:right;font-weight:700;color:var(--'+(remaining>0?'warning':'success')+')">₱'+remaining.toLocaleString()+'</td></tr>';
+    });
+    allocHtml += '</tbody></table></div>';
+  } else {
+    allocHtml = '<div class="empty" style="padding:10px">No profit to allocate yet</div>';
+  }
+
+  return '<div class="panel" style="margin-top:14px">'
+    +'<div class="panel-head"><div class="panel-title">💹 Profit Allocation — '+yr+'</div>'
+    +'<span class="bc-tag" style="background:'+(isCurrentYear?'var(--warning-soft);color:var(--warning)':'var(--success-soft);color:var(--success)')+'">'+statusLabel+'</span></div>'
+    +'<div class="panel-body">'
+    +'<div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap">'
+    +'<div style="flex:1;min-width:140px;padding:12px;background:var(--bg-elev2);border-radius:10px;border:1px solid var(--border);text-align:center">'
+    +'<div style="font-size:11px;color:var(--text-dim)">Investor Gross Profit</div>'
+    +'<div style="font-size:20px;font-weight:800;color:var(--accent)">₱'+profit.toLocaleString()+'</div></div>'
+    +'<div style="flex:1;min-width:140px;padding:12px;background:var(--bg-elev2);border-radius:10px;border:1px solid var(--border);text-align:center">'
+    +'<div style="font-size:11px;color:var(--text-dim)">→ Investors ('+invPct+'%)</div>'
+    +'<div style="font-size:18px;font-weight:700;color:var(--success)">₱'+investorShare.toLocaleString()+'</div></div>'
+    +'<div style="flex:1;min-width:140px;padding:12px;background:var(--bg-elev2);border-radius:10px;border:1px solid var(--border);text-align:center">'
+    +'<div style="font-size:11px;color:var(--text-dim)">→ Business ('+bizPct+'%)</div>'
+    +'<div style="font-size:18px;font-weight:700;color:var(--info)">₱'+businessShare.toLocaleString()+'</div></div>'
+    +'</div>'
+    +allocHtml
+    +'<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'
+    +'<button class="btn btn-gold btn-sm" onclick="openAddDistribution()">💸 Record Distribution</button>'
+    +(!isCurrentYear?'<button class="btn btn-outline btn-sm" onclick="reconcileYear(\''+yr+'\')">📋 Reconcile '+yr+'</button>':'')
+    +'</div></div></div>';
+}
+
+function buildExpansionFundPanel() {
+  var deposits = EXPANSION_FUND.filter(function(e){return e.type==='deposit';}).reduce(function(s,e){return s+(parseFloat(e.amount)||0);},0);
+  var withdrawals = EXPANSION_FUND.filter(function(e){return e.type==='withdrawal';}).reduce(function(s,e){return s+(parseFloat(e.amount)||0);},0);
+  var balance = deposits - withdrawals;
+
+  var txnHtml = '';
+  if (EXPANSION_FUND.length) {
+    txnHtml = '<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Description</th><th style="text-align:right">Amount</th><th></th></tr></thead><tbody>'
+      +EXPANSION_FUND.slice().sort(function(a,b){return (b.date||'').localeCompare(a.date||'');}).map(function(e){
+        var isDeposit = e.type==='deposit';
+        return '<tr><td style="font-size:12px">'+formatDate(e.date)+'</td>'
+          +'<td><span class="bc-tag" style="background:'+(isDeposit?'var(--success-soft);color:var(--success)':'var(--danger-soft);color:var(--danger)')+'">'+e.type+'</span></td>'
+          +'<td style="font-size:12px">'+(e.description||'—')+(e.source==='profit_share'?' <span style="font-size:10px;color:var(--text-dim)">(from profit share)</span>':'')+'</td>'
+          +'<td style="text-align:right;font-weight:700;color:var(--'+(isDeposit?'success':'danger')+')">₱'+(parseFloat(e.amount)||0).toLocaleString()+'</td>'
+          +'<td><button class="btn btn-danger btn-xs" onclick="deleteExpFund(\''+e.id+'\')">🗑️</button></td></tr>';
+      }).join('')+'</tbody></table></div>';
+  } else {
+    txnHtml = '<div class="empty" style="padding:10px">No expansion fund transactions yet</div>';
+  }
+
+  return '<div class="panel" style="margin-top:14px">'
+    +'<div class="panel-head"><div class="panel-title">🏗️ Expansion Fund</div>'
+    +'<button class="btn btn-gold btn-sm" onclick="openAddExpFund()">➕ Add Transaction</button></div>'
+    +'<div class="panel-body">'
+    +'<div class="stats-grid" style="grid-template-columns:repeat(auto-fill,minmax(130px,1fr));margin-bottom:12px">'
+    +'<div class="stat-card stat-success" style="padding:12px"><div class="stat-label">Total Deposits</div><div class="stat-value" style="font-size:16px;color:var(--success)">₱'+deposits.toLocaleString()+'</div></div>'
+    +'<div class="stat-card stat-danger" style="padding:12px"><div class="stat-label">Withdrawals</div><div class="stat-value" style="font-size:16px;color:var(--danger)">₱'+withdrawals.toLocaleString()+'</div></div>'
+    +'<div class="stat-card stat-gold" style="padding:12px"><div class="stat-label">Balance</div><div class="stat-value" style="font-size:18px;color:var(--accent)">₱'+balance.toLocaleString()+'</div></div>'
+    +'</div>'
+    +txnHtml
     +'</div></div>';
+}
+
+function buildDistributionsPanel(yr) {
+  var yrDist = INVESTOR_DISTRIBUTIONS.filter(function(d){return d.period&&d.period.startsWith(yr);});
+  if (!yrDist.length && !ACCT_INVESTORS.length) return '';
+
+  var distHtml = '';
+  if (yrDist.length) {
+    distHtml = '<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Investor</th><th>Period</th><th>Type</th><th style="text-align:right">Amount</th><th>Status</th><th></th></tr></thead><tbody>'
+      +yrDist.slice().sort(function(a,b){return (b.date||'').localeCompare(a.date||'');}).map(function(d){
+        var inv = ACCT_INVESTORS.find(function(i){return i.id===d.investorId;});
+        return '<tr><td style="font-size:12px">'+formatDate(d.date)+'</td>'
+          +'<td>'+(inv?inv.name:d.investorId)+'</td>'
+          +'<td style="font-size:12px">'+(d.period||'')+'</td>'
+          +'<td><span class="bc-tag" style="background:'+(d.type==='actual'?'var(--success-soft);color:var(--success)':'var(--warning-soft);color:var(--warning)')+'">'+(d.type||'provisional')+'</span></td>'
+          +'<td style="text-align:right;font-weight:700;color:var(--accent)">₱'+(parseFloat(d.amount)||0).toLocaleString()+'</td>'
+          +'<td><span class="bc-tag" style="background:'+(d.status==='released'?'var(--success-soft);color:var(--success)':'var(--info-soft);color:var(--info)')+'">'+(d.status||'pending')+'</span></td>'
+          +'<td>'+(d.status!=='released'?'<button class="btn btn-success btn-xs" onclick="releaseDistribution(\''+d.id+'\')">✅</button> ':'')+'<button class="btn btn-danger btn-xs" onclick="deleteDistribution(\''+d.id+'\')">🗑️</button></td></tr>';
+      }).join('')+'</tbody></table></div>';
+  } else {
+    distHtml = '<div class="empty" style="padding:10px">No distributions recorded for '+yr+'</div>';
+  }
+
+  return '<div class="panel" style="margin-top:14px">'
+    +'<div class="panel-head"><div class="panel-title">💸 Distributions — '+yr+'</div></div>'
+    +'<div class="panel-body">'+distHtml+'</div></div>';
+}
+
+function openAddDistribution() {
+  var invOpts = ACCT_INVESTORS.map(function(i){return '<option value="'+i.id+'">'+i.name+'</option>';}).join('');
+  if (!invOpts) { showToast('Add investors first','warning'); return; }
+  var today = new Date().toISOString().split('T')[0];
+  var html = '<div class="form-grid">'
+    +'<div class="field"><label>Investor *</label><select id="dist_inv">'+invOpts+'</select></div>'
+    +'<div class="field"><label>Amount (₱) *</label><input type="number" id="dist_amt" min="0" step="0.01"></div>'
+    +'<div class="field"><label>Period *</label><input id="dist_period" value="'+new Date().getFullYear()+'" placeholder="e.g. 2026 or 2026-Q1"></div>'
+    +'<div class="field"><label>Type</label><select id="dist_type"><option value="provisional">Provisional (monthly ipon)</option><option value="actual">Actual (reconciled)</option></select></div>'
+    +'<div class="field"><label>Date</label><input type="date" id="dist_date" value="'+today+'"></div>'
+    +'<div class="field form-full"><label>Notes</label><input id="dist_notes" placeholder="Optional notes"></div>'
+    +'</div>';
+  showModal('💸 Record Distribution', html, '520px');
+  document.getElementById('expModalFoot').innerHTML =
+    '<button class="btn btn-outline btn-sm" onclick="closeModal(\'expenseModal\')">Cancel</button>'
+    +'<button class="btn btn-gold btn-sm" onclick="saveDistribution()">💾 Save</button>';
+}
+
+function saveDistribution() {
+  var investorId = document.getElementById('dist_inv').value;
+  var amount = parseFloat(document.getElementById('dist_amt').value);
+  if (!investorId || isNaN(amount) || amount<=0) { showToast('Enter investor and valid amount','warning'); return; }
+  var entry = {
+    id: 'DIST-'+Date.now(),
+    investorId: investorId,
+    amount: amount,
+    period: (document.getElementById('dist_period').value||'').trim(),
+    type: document.getElementById('dist_type').value,
+    status: 'pending',
+    date: document.getElementById('dist_date').value || new Date().toISOString().split('T')[0],
+    notes: (document.getElementById('dist_notes').value||'').trim()
+  };
+  function doSave() {
+    INVESTOR_DISTRIBUTIONS.push(entry);
+    saveAcctData();
+    closeModal('expenseModal');
+    var inv = ACCT_INVESTORS.find(function(i){return i.id===investorId;});
+    showToast('Distribution recorded for '+(inv?inv.name:'investor'),'success');
+    logActivity('💸','Distribution: ₱'+amount.toLocaleString()+' to '+(inv?inv.name:investorId),'finance');
+    switchView('accounting');
+  }
+  if (getOwnerFundPin()) {
+    requireOwnerPin('Distribution: ₱'+amount.toLocaleString(), doSave);
+  } else {
+    doSave();
+  }
+}
+
+function releaseDistribution(id) {
+  var d = INVESTOR_DISTRIBUTIONS.find(function(x){return x.id===id;});
+  if (!d) return;
+  function doRelease() {
+    d.status = 'released';
+    saveAcctData();
+    var inv = ACCT_INVESTORS.find(function(i){return i.id===d.investorId;});
+    showToast('Distribution released!','success');
+    logActivity('✅','Released distribution: ₱'+(parseFloat(d.amount)||0).toLocaleString()+' to '+(inv?inv.name:d.investorId),'finance');
+    switchView('accounting');
+  }
+  if (getOwnerFundPin()) {
+    requireOwnerPin('Release Distribution: ₱'+(parseFloat(d.amount)||0).toLocaleString(), doRelease);
+  } else {
+    doRelease();
+  }
+}
+
+function deleteDistribution(id) {
+  if (!confirm('Delete this distribution record?')) return;
+  INVESTOR_DISTRIBUTIONS = INVESTOR_DISTRIBUTIONS.filter(function(x){return x.id!==id;});
+  saveAcctData();
+  showToast('Distribution deleted','info');
+  switchView('accounting');
+}
+
+function openAddExpFund() {
+  var today = new Date().toISOString().split('T')[0];
+  var html = '<div class="form-grid">'
+    +'<div class="field"><label>Type *</label><select id="ef_type"><option value="deposit">Deposit</option><option value="withdrawal">Withdrawal</option></select></div>'
+    +'<div class="field"><label>Amount (₱) *</label><input type="number" id="ef_amt" min="0" step="0.01"></div>'
+    +'<div class="field"><label>Date</label><input type="date" id="ef_date" value="'+today+'"></div>'
+    +'<div class="field"><label>Source</label><select id="ef_src"><option value="manual">Manual</option><option value="profit_share">From Profit Share</option></select></div>'
+    +'<div class="field form-full"><label>Description</label><input id="ef_desc" placeholder="e.g. Business expansion allocation"></div>'
+    +'</div>';
+  showModal('🏗️ Expansion Fund Transaction', html, '480px');
+  document.getElementById('expModalFoot').innerHTML =
+    '<button class="btn btn-outline btn-sm" onclick="closeModal(\'expenseModal\')">Cancel</button>'
+    +'<button class="btn btn-gold btn-sm" onclick="saveExpFund()">💾 Save</button>';
+}
+
+function saveExpFund() {
+  var amount = parseFloat(document.getElementById('ef_amt').value);
+  if (isNaN(amount) || amount<=0) { showToast('Enter a valid amount','warning'); return; }
+  var entry = {
+    id: 'EF-'+Date.now(),
+    date: document.getElementById('ef_date').value || new Date().toISOString().split('T')[0],
+    type: document.getElementById('ef_type').value,
+    amount: amount,
+    description: (document.getElementById('ef_desc').value||'').trim(),
+    source: document.getElementById('ef_src').value
+  };
+  EXPANSION_FUND.push(entry);
+  saveAcctData();
+  closeModal('expenseModal');
+  showToast('Expansion fund '+entry.type+' recorded','success');
+  logActivity('🏗️','Expansion fund '+entry.type+': ₱'+amount.toLocaleString(),'finance');
+  switchView('accounting');
+}
+
+function deleteExpFund(id) {
+  if (!confirm('Delete this expansion fund entry?')) return;
+  EXPANSION_FUND = EXPANSION_FUND.filter(function(x){return x.id!==id;});
+  saveAcctData();
+  showToast('Entry deleted','info');
+  switchView('accounting');
+}
+
+function reconcileYear(yr) {
+  // Convert all provisional distributions for this year to actual
+  var count = 0;
+  INVESTOR_DISTRIBUTIONS.forEach(function(d) {
+    if (d.period && d.period.startsWith(yr) && d.type==='provisional') {
+      d.type = 'actual';
+      count++;
+    }
+  });
+  if (count===0) { showToast('No provisional distributions to reconcile for '+yr,'info'); return; }
+  saveAcctData();
+  showToast(count+' distribution'+(count!==1?'s':'')+' reconciled to actual for '+yr,'success');
+  logActivity('📋','Year-end reconciliation: '+count+' distributions finalized for '+yr,'finance');
+  switchView('accounting');
 }
 
 function openEditInvestor(editId) {
@@ -7018,6 +7280,121 @@ function renderMamaCommissions() {
     +'<div style="font-size:11px;color:var(--text-dim);padding:8px 12px;background:var(--bg-elev2);border-radius:8px;margin-top:12px">💡 Commissions reflect only after the owner approves successfully completed services.</div>';
 }
 
+/* ===========================
+   INVESTOR DASHBOARD (#38)
+=========================== */
+function renderInvestorDashboard() {
+  loadAcctData();
+  var yr = new Date().getFullYear();
+  var yrFrom = yr+'-01-01', yrTo = yr+'-12-31';
+  var isCurrentYear = true;
+
+  // Investor-funded product metrics
+  var invProducts = UNIT_PRODUCTS.filter(function(p){return p.fundingSource==='Investor';});
+  var invSales = UNIT_SALES.filter(function(sl){
+    if (!sl.date||sl.date<yrFrom||sl.date>yrTo) return false;
+    var prod = UNIT_PRODUCTS.find(function(p){return p.id===sl.productId;});
+    return prod && prod.fundingSource==='Investor';
+  });
+  var invRevenue = invSales.reduce(function(s,sl){return s+(parseFloat(sl.totalPrice)||0);},0);
+  var invCOGS = invSales.reduce(function(s,sl){return s+(parseFloat(sl.costPrice)||0)*(parseInt(sl.qty)||1);},0);
+  var invGrossProfit = invRevenue - invCOGS;
+  var totalCapital = INVESTOR_DEPOSITS.reduce(function(s,d){return s+(parseFloat(d.amount)||0);},0);
+  var invInventoryValue = invProducts.reduce(function(s,p){return s+((parseFloat(p.costPrice)||0)*(parseInt(p.stock)||0));},0);
+
+  // Profit split
+  var investorPoolPct = PROFIT_SPLIT.investorPct;
+  var profit = invGrossProfit > 0 ? invGrossProfit : 0;
+  var investorPool = Math.round(profit * investorPoolPct / 100);
+
+  // Expansion fund balance
+  var efDeposits = EXPANSION_FUND.filter(function(e){return e.type==='deposit';}).reduce(function(s,e){return s+(parseFloat(e.amount)||0);},0);
+  var efWithdrawals = EXPANSION_FUND.filter(function(e){return e.type==='withdrawal';}).reduce(function(s,e){return s+(parseFloat(e.amount)||0);},0);
+  var efBalance = efDeposits - efWithdrawals;
+
+  // Per-investor breakdown
+  var invCards = '';
+  if (ACCT_INVESTORS.length) {
+    invCards = ACCT_INVESTORS.map(function(inv){
+      var pct = parseFloat(inv.percentage)||0;
+      var allocated = Math.round(investorPool * pct / 100);
+      var released = INVESTOR_DISTRIBUTIONS.filter(function(d){return d.investorId===inv.id&&d.status==='released'&&d.period&&d.period.startsWith(String(yr));}).reduce(function(s,d){return s+(parseFloat(d.amount)||0);},0);
+      var pending = INVESTOR_DISTRIBUTIONS.filter(function(d){return d.investorId===inv.id&&d.status==='pending'&&d.period&&d.period.startsWith(String(yr));}).reduce(function(s,d){return s+(parseFloat(d.amount)||0);},0);
+      var remaining = allocated - released - pending;
+      return '<div style="background:var(--bg-elev2);border:1.5px solid var(--border);border-radius:12px;padding:16px">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
+        +'<div style="font-weight:700;font-size:15px">'+inv.name+'</div>'
+        +'<span style="font-size:22px;font-weight:800;color:var(--accent)">'+pct+'%</span></div>'
+        +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+        +'<div style="padding:8px;background:var(--bg);border-radius:8px;text-align:center"><div style="font-size:10px;color:var(--text-dim)">Allocated ('+yr+')</div><div style="font-weight:700;color:var(--accent)">₱'+allocated.toLocaleString()+'</div></div>'
+        +'<div style="padding:8px;background:var(--bg);border-radius:8px;text-align:center"><div style="font-size:10px;color:var(--text-dim)">Released</div><div style="font-weight:700;color:var(--success)">₱'+released.toLocaleString()+'</div></div>'
+        +'<div style="padding:8px;background:var(--bg);border-radius:8px;text-align:center"><div style="font-size:10px;color:var(--text-dim)">Pending</div><div style="font-weight:700;color:var(--warning)">₱'+pending.toLocaleString()+'</div></div>'
+        +'<div style="padding:8px;background:var(--bg);border-radius:8px;text-align:center"><div style="font-size:10px;color:var(--text-dim)">Remaining</div><div style="font-weight:700;color:var(--'+(remaining>0?'info':'success')+')">₱'+remaining.toLocaleString()+'</div></div>'
+        +'</div></div>';
+    }).join('');
+  }
+
+  // Monthly sales trend
+  var monthlyData = [];
+  for (var m=0; m<12; m++) {
+    var mStr = yr+'-'+String(m+1).padStart(2,'0');
+    var mFrom = mStr+'-01';
+    var mTo = mStr+'-'+String(new Date(yr,m+1,0).getDate()).padStart(2,'0');
+    var mSales = invSales.filter(function(sl){return sl.date>=mFrom&&sl.date<=mTo;});
+    var mRev = mSales.reduce(function(s,sl){return s+(parseFloat(sl.totalPrice)||0);},0);
+    var mCost = mSales.reduce(function(s,sl){return s+(parseFloat(sl.costPrice)||0)*(parseInt(sl.qty)||1);},0);
+    monthlyData.push({month:new Date(yr,m,1).toLocaleString('default',{month:'short'}), rev:mRev, cost:mCost, profit:mRev-mCost, count:mSales.length});
+  }
+  var maxMonthRev = Math.max.apply(null, monthlyData.map(function(m){return m.rev;})) || 1;
+
+  var monthlyChart = monthlyData.map(function(m){
+    var h = Math.round((m.rev/maxMonthRev)*60);
+    return '<div style="text-align:center;flex:1;min-width:40px">'
+      +'<div style="font-size:10px;font-weight:700;color:var(--accent);margin-bottom:2px">'+(m.rev>0?'₱'+(m.rev/1000).toFixed(0)+'k':'')+'</div>'
+      +'<div style="height:60px;display:flex;align-items:flex-end;justify-content:center">'
+      +'<div style="width:20px;height:'+Math.max(h,2)+'px;background:var(--accent);border-radius:4px 4px 0 0;transition:height .4s"></div></div>'
+      +'<div style="font-size:9px;color:var(--text-dim);margin-top:3px">'+m.month+'</div></div>';
+  }).join('');
+
+  var statusLabel = isCurrentYear ? '📊 Provisional (YTD)' : '✅ Actual (Final)';
+
+  return '<div style="margin-bottom:12px"><button class="btn btn-outline btn-sm" onclick="switchView(\'accounting\')" style="font-size:12px">← Back to Accounting</button></div>'
+    +'<div style="font-size:12px;color:var(--text-dim);margin-bottom:14px;padding:8px 12px;background:var(--bg-elev2);border-radius:8px">'+statusLabel+' — This dashboard shows <strong>only investor-funded operations</strong>, not full business financials.</div>'
+    // KPI stats
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:16px">'
+    +'<div class="stat-card stat-gold"><div class="stat-icon">🏦</div><div class="stat-label">Total Capital</div><div class="stat-value" style="font-size:18px">₱'+totalCapital.toLocaleString()+'</div></div>'
+    +'<div class="stat-card stat-info"><div class="stat-icon">📦</div><div class="stat-label">Inventory Value</div><div class="stat-value" style="font-size:18px">₱'+invInventoryValue.toLocaleString()+'</div><div class="stat-sub">'+invProducts.length+' product'+(invProducts.length!==1?'s':'')+'</div></div>'
+    +'<div class="stat-card stat-success"><div class="stat-icon">🧾</div><div class="stat-label">Revenue ('+yr+')</div><div class="stat-value" style="font-size:18px;color:var(--accent)">₱'+invRevenue.toLocaleString()+'</div><div class="stat-sub">'+invSales.length+' sale'+(invSales.length!==1?'s':'')+'</div></div>'
+    +'<div class="stat-card '+(invGrossProfit>=0?'stat-success':'stat-danger')+'"><div class="stat-icon">'+(invGrossProfit>=0?'📈':'📉')+'</div><div class="stat-label">Gross Profit</div><div class="stat-value" style="font-size:18px">₱'+invGrossProfit.toLocaleString()+'</div><div class="stat-sub">COGS: ₱'+invCOGS.toLocaleString()+'</div></div>'
+    +'<div class="stat-card stat-gold"><div class="stat-icon">💹</div><div class="stat-label">Investor Pool ('+investorPoolPct+'%)</div><div class="stat-value" style="font-size:18px;color:var(--accent)">₱'+investorPool.toLocaleString()+'</div></div>'
+    +'<div class="stat-card stat-info"><div class="stat-icon">🏗️</div><div class="stat-label">Expansion Fund</div><div class="stat-value" style="font-size:18px">₱'+efBalance.toLocaleString()+'</div></div>'
+    +'</div>'
+    // Monthly Sales Chart
+    +'<div class="panel" style="margin-bottom:16px"><div class="panel-head"><div class="panel-title">📊 Monthly Revenue Trend — '+yr+'</div></div>'
+    +'<div class="panel-body"><div style="display:flex;gap:4px;align-items:flex-end">'+monthlyChart+'</div></div></div>'
+    // Investor Cards
+    +(ACCT_INVESTORS.length ?
+      '<div class="panel" style="margin-bottom:16px"><div class="panel-head"><div class="panel-title">👤 Investor Allocations — '+yr+'</div></div>'
+      +'<div class="panel-body"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px">'+invCards+'</div></div></div>'
+    : '')
+    // Product Inventory
+    +'<div class="panel" style="margin-bottom:16px"><div class="panel-head"><div class="panel-title">📦 Investor-Funded Inventory</div></div>'
+    +'<div class="panel-body">'
+    +(invProducts.length ?
+      '<div class="tbl-wrap"><table><thead><tr><th>Product</th><th>Type</th><th style="text-align:center">Stock</th><th style="text-align:right">Cost</th><th style="text-align:right">Sell Price</th><th style="text-align:right">Value</th></tr></thead><tbody>'
+      +invProducts.map(function(p){
+        var val = (parseFloat(p.costPrice)||0)*(parseInt(p.stock)||0);
+        return '<tr><td><strong>'+p.brand+' '+p.model+'</strong></td>'
+          +'<td style="font-size:12px">'+(p.type||'—')+(p.hp?' · '+p.hp+'HP':'')+'</td>'
+          +'<td style="text-align:center;font-weight:700">'+p.stock+'</td>'
+          +'<td style="text-align:right">₱'+(parseFloat(p.costPrice)||0).toLocaleString()+'</td>'
+          +'<td style="text-align:right">₱'+(parseFloat(p.price)||0).toLocaleString()+'</td>'
+          +'<td style="text-align:right;font-weight:700">₱'+val.toLocaleString()+'</td></tr>';
+      }).join('')+'</tbody></table></div>'
+    : '<div class="empty" style="padding:14px">No investor-funded products in inventory</div>')
+    +'</div></div>';
+}
+
 // ─── COMMISSION MANAGEMENT ─────────────────────────
 function generateCommission(bookingId) {
   var b = BOOKINGS[bookingId];
@@ -7094,6 +7471,16 @@ function savePettyCashConfig() {
   PETTY_CASH_CONFIG.monthlyAllocation = a;
   localStorage.setItem('djce_petty_cash_config', JSON.stringify(PETTY_CASH_CONFIG));
   showToast('Petty cash budget updated!','success');
+}
+
+function saveProfitSplit() {
+  var inv = parseFloat(document.getElementById('ps_inv').value);
+  var biz = parseFloat(document.getElementById('ps_biz').value);
+  if (isNaN(inv)||isNaN(biz)||inv<0||biz<0||inv>100||biz>100) { showToast('Enter valid percentages (0–100)','error'); return; }
+  if (Math.round(inv+biz)!==100) { showToast('Investor + Business must equal 100%','error'); return; }
+  PROFIT_SPLIT = { investorPct: inv, businessPct: biz };
+  localStorage.setItem('djce_profit_split', JSON.stringify(PROFIT_SPLIT));
+  showToast('Profit split saved! ('+inv+'% / '+biz+'%)','success');
 }
 
 function renderAcctCommissions() {
@@ -8938,6 +9325,17 @@ function renderSettings(){
           <div class="field"><label>Monthly Allocation (₱)</label><input type="number" id="pc_alloc" value="${PETTY_CASH_CONFIG.monthlyAllocation}" min="0" step="500" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"></div>
         </div>
         <button class="btn btn-gold btn-sm" onclick="savePettyCashConfig()">💾 Save</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">💹 Investor Profit Split</div><div class="panel-subtitle">How gross profit from investor-funded products is divided</div></div>
+      <div class="panel-body">
+        <div class="form-grid">
+          <div class="field"><label>Investor Share (%)</label><input type="number" id="ps_inv" value="${PROFIT_SPLIT.investorPct}" min="0" max="100" step="5" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"></div>
+          <div class="field"><label>Business Share (%)</label><input type="number" id="ps_biz" value="${PROFIT_SPLIT.businessPct}" min="0" max="100" step="5" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"></div>
+        </div>
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">Must total 100%. Default: 30% investor / 70% business.</div>
+        <button class="btn btn-gold btn-sm" onclick="saveProfitSplit()">💾 Save Split</button>
       </div>
     </div>
     <div class="panel">
