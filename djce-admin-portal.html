@@ -1170,6 +1170,7 @@ let ACCT_COMMISSIONS = []; // { id, bookingId, referredBy, type:'new'|'repeat'|'
 let COMMISSION_RATES = { newClient: 3, repeatClient: 2, followUpCleaning: 3 }; // percentages of gross profit
 let ACCT_PETTY_CASH = []; // { id, date, type:'release'|'liquidation'|'replenish', amount, description, receiptRef, relatedJobId, category, month }
 let PETTY_CASH_CONFIG = { monthlyAllocation: 5000 }; // configurable monthly petty cash budget
+let OWNER_FUND_PIN = ''; // owner's fund-release PIN (stored in localStorage)
 let _acctTab = 'employees'; // current accounting sub-tab
 
 // Unit Sales module data (localStorage)
@@ -6893,12 +6894,19 @@ function generateCommission(bookingId) {
 function approveCommission(commId) {
   var c = ACCT_COMMISSIONS.find(function(x){return x.id===commId;});
   if (!c) return;
-  c.status = 'approved';
-  c.approvedDate = new Date().toISOString().split('T')[0];
-  saveAcctData();
-  showToast('Commission approved ✅','success');
-  logActivity('✅', 'Approved commission '+commId+': ₱'+(parseFloat(c.amount)||0).toLocaleString(), 'commission');
-  switchView('accounting');
+  function doApprove() {
+    c.status = 'approved';
+    c.approvedDate = new Date().toISOString().split('T')[0];
+    saveAcctData();
+    showToast('Commission approved ✅','success');
+    logActivity('✅', 'Approved commission '+commId+': ₱'+(parseFloat(c.amount)||0).toLocaleString(), 'commission');
+    switchView('accounting');
+  }
+  if (getOwnerFundPin()) {
+    requireOwnerPin('Commission Approval: ₱'+(parseFloat(c.amount)||0).toLocaleString(), doApprove);
+  } else {
+    doApprove();
+  }
 }
 
 function rejectCommission(commId) {
@@ -7079,12 +7087,22 @@ function savePettyCash(type) {
     category: (document.getElementById('pc_cat')||{}).value||'',
     month: month
   };
-  ACCT_PETTY_CASH.push(entry);
-  saveAcctData();
-  closeModal();
-  showToast(type==='release'?'Petty cash released':'Petty cash '+type+' recorded','success');
-  logActivity('💰','Petty cash '+type+': ₱'+amount.toLocaleString()+' — '+desc,'finance');
-  switchView('accounting');
+
+  function doSave() {
+    ACCT_PETTY_CASH.push(entry);
+    saveAcctData();
+    closeModal('expenseModal');
+    showToast(type==='release'?'Petty cash released':'Petty cash '+type+' recorded','success');
+    logActivity('💰','Petty cash '+type+': ₱'+amount.toLocaleString()+' — '+desc,'finance');
+    switchView('accounting');
+  }
+
+  // Require owner PIN for releases
+  if (type==='release' && getOwnerFundPin()) {
+    requireOwnerPin('Petty Cash Release: ₱'+amount.toLocaleString(), doSave);
+  } else {
+    doSave();
+  }
 }
 
 function deletePettyCash(id) {
@@ -8254,7 +8272,18 @@ function closeSidebar() {
    MODALS
 =========================== */
 function openModal(id) { document.getElementById(id)?.classList.add('active'); }
-function closeModal(id) { document.getElementById(id)?.classList.remove('active'); }
+function closeModal(id) {
+  if (id) { document.getElementById(id)?.classList.remove('active'); }
+  else { document.getElementById('expenseModal')?.classList.remove('active'); }
+}
+function showModal(title, bodyHtml, width) {
+  document.getElementById('expModalTitle').textContent = '';
+  document.getElementById('expModalTitle').innerHTML = title;
+  document.getElementById('expModalBody').innerHTML = bodyHtml;
+  document.getElementById('expModalFoot').innerHTML = '<button class="btn btn-outline btn-sm" onclick="closeModal(\'expenseModal\')">Close</button>';
+  if (width) document.querySelector('#expenseModal .modal-card').style.maxWidth = width;
+  openModal('expenseModal');
+}
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.querySelectorAll('.modal-bg.active').forEach(m=>m.classList.remove('active')); });
 
 function confirm2(title, msg, icon, onConfirm) {
@@ -8750,6 +8779,27 @@ function renderSettings(){
         <button class="btn btn-gold btn-sm" onclick="savePettyCashConfig()">💾 Save</button>
       </div>
     </div>
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">🔐 Fund Release PIN</div><div class="panel-subtitle">2-step verification for payroll, petty cash, and investor fund releases</div></div>
+      <div class="panel-body">
+        <div style="display:flex;align-items:center;gap:14px;padding:12px 14px;background:var(--bg-elev2);border-radius:10px;border:1px solid var(--border);margin-bottom:16px">
+          <div style="font-size:28px">${getOwnerFundPin()?'🔐':'🔓'}</div>
+          <div>
+            <div style="font-size:13px;font-weight:700">${getOwnerFundPin()?'Fund PIN is set':'No Fund PIN set'}</div>
+            <div style="font-size:11.5px;color:var(--text-dim)">${getOwnerFundPin()?'Payroll release, petty cash release, and distributions require PIN confirmation':'Set a PIN to protect fund releases'}</div>
+          </div>
+          <div style="margin-left:auto">
+            ${getOwnerFundPin()
+              ? '<span style="background:var(--success-soft);color:var(--success);font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px">ACTIVE</span>'
+              : '<span style="background:var(--danger-soft);color:var(--danger);font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px">NOT SET</span>'}
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-gold btn-sm" onclick="setupFundPin()">${getOwnerFundPin()?'🔄 Change PIN':'🔒 Set PIN'}</button>
+          ${getOwnerFundPin()?'<button class="btn btn-danger btn-sm" onclick="removeFundPin()">🗑️ Remove</button>':''}
+        </div>
+      </div>
+    </div>
     ` : ''}
 
     ${(session.role==='owner'||session.role==='admin') ? renderServiceCatalog() : ''}
@@ -9146,6 +9196,94 @@ function resetUserPin(username) {
 /* ===========================
    PIN LOCK SYSTEM
 =========================== */
+/* ── Owner Fund-Release PIN (2-Step Verification) ── */
+var _pendingPinCallback = null;
+
+function getOwnerFundPin() {
+  try { return localStorage.getItem('djce_owner_fund_pin')||''; } catch(e){ return ''; }
+}
+function saveOwnerFundPin(pin) {
+  try { localStorage.setItem('djce_owner_fund_pin', pin); } catch(e){}
+}
+
+function requireOwnerPin(actionLabel, callback) {
+  var storedPin = getOwnerFundPin();
+  if (!storedPin) {
+    showToast('⚠️ Owner Fund PIN not set. Go to Settings → Fund Release PIN to set it first.','warning');
+    return;
+  }
+  if (session.role !== 'owner') {
+    showToast('Only the owner can authorize fund releases','error');
+    return;
+  }
+  _pendingPinCallback = callback;
+  showModal('🔐 Owner PIN Required',
+    '<div style="text-align:center;margin-bottom:16px">'
+    +'<div style="font-size:13px;color:var(--text-dim);margin-bottom:8px">Authorize: <strong>'+actionLabel+'</strong></div>'
+    +'<div style="font-size:12px;color:var(--warning)">Enter your 4-digit Fund Release PIN</div>'
+    +'</div>'
+    +'<div style="display:flex;justify-content:center;margin-bottom:16px">'
+    +'<input type="password" id="fund_pin_input" maxlength="4" inputmode="numeric" pattern="[0-9]*" placeholder="• • • •"'
+    +' style="width:140px;padding:14px;border:2px solid var(--accent);border-radius:12px;background:var(--bg);color:var(--text);font-family:inherit;font-size:22px;letter-spacing:10px;text-align:center;outline:none">'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;justify-content:center">'
+    +'<button class="btn btn-outline btn-sm" onclick="closeModal(\'expenseModal\')">Cancel</button>'
+    +'<button class="btn btn-gold btn-sm" onclick="verifyFundPin()">✅ Confirm</button>'
+    +'</div>',
+  '380px');
+  setTimeout(function(){ var el=document.getElementById('fund_pin_input'); if(el) el.focus(); },100);
+}
+
+function verifyFundPin() {
+  var entered = (document.getElementById('fund_pin_input').value||'').trim();
+  if (entered !== getOwnerFundPin()) {
+    showToast('Incorrect PIN','error');
+    var el = document.getElementById('fund_pin_input');
+    if (el) { el.value=''; el.style.borderColor='var(--danger)'; el.focus(); }
+    return;
+  }
+  closeModal('expenseModal');
+  if (_pendingPinCallback) {
+    var cb = _pendingPinCallback;
+    _pendingPinCallback = null;
+    cb();
+  }
+}
+
+function setupFundPin() {
+  showModal('🔐 Set Fund Release PIN',
+    '<div style="text-align:center;margin-bottom:16px">'
+    +'<div style="font-size:13px;color:var(--text-dim)">This PIN is required for payroll release, petty cash release, and investor distributions.</div>'
+    +'</div>'
+    +'<div class="form-grid" style="max-width:300px;margin:0 auto">'
+    +'<div class="field"><label>New 4-digit PIN</label><input type="password" id="fp_new" maxlength="4" inputmode="numeric" pattern="[0-9]*" placeholder="• • • •" style="width:100%;padding:12px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-size:18px;letter-spacing:8px;text-align:center;outline:none"></div>'
+    +'<div class="field"><label>Confirm PIN</label><input type="password" id="fp_confirm" maxlength="4" inputmode="numeric" pattern="[0-9]*" placeholder="• • • •" style="width:100%;padding:12px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-size:18px;letter-spacing:8px;text-align:center;outline:none"></div>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;justify-content:center;margin-top:14px">'
+    +'<button class="btn btn-outline btn-sm" onclick="closeModal(\'expenseModal\')">Cancel</button>'
+    +'<button class="btn btn-gold btn-sm" onclick="saveFundPinSetup()">💾 Save PIN</button>'
+    +'</div>',
+  '380px');
+}
+
+function saveFundPinSetup() {
+  var pin1 = (document.getElementById('fp_new').value||'').trim();
+  var pin2 = (document.getElementById('fp_confirm').value||'').trim();
+  if (pin1.length!==4||!/^\d{4}$/.test(pin1)) { showToast('PIN must be exactly 4 digits','error'); return; }
+  if (pin1!==pin2) { showToast('PINs do not match','error'); return; }
+  saveOwnerFundPin(pin1);
+  closeModal('expenseModal');
+  showToast('Fund Release PIN saved!','success');
+  switchView('settings');
+}
+
+function removeFundPin() {
+  if (!confirm('Remove Fund Release PIN? Fund releases will not require verification until a new PIN is set.')) return;
+  localStorage.removeItem('djce_owner_fund_pin');
+  showToast('Fund PIN removed','info');
+  switchView('settings');
+}
+
 var PIN_TIMEOUT_MS  = 15 * 60 * 1000; // 15 minutes
 var _pinTimer       = null;
 var _pinEntry       = '';
