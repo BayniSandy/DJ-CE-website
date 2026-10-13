@@ -5658,7 +5658,7 @@ function buildFinancialReportSections(ym, mFrom, mTo, serviceGross, opex) {
     +'</div></div>';
 
   // --- Petty Cash Reconciliation ---
-  var pcData = (typeof getPettyCashMonth==='function') ? getPettyCashMonth(ym) : {allocation:0,released:0,liquidated:0,replenished:0,balance:0,unspent:0};
+  var pcData = (typeof getPettyCashMonth==='function') ? getPettyCashMonth(ym) : {alloc:0,released:0,liquidated:0,replenished:0,balance:0,unspent:0};
   var pcTxns = ACCT_PETTY_CASH.filter(function(t){return (t.month||'')===ym || (t.date&&t.date.substring(0,7)===ym);});
   var unliquidated = pcData.released - pcData.liquidated;
 
@@ -5666,10 +5666,10 @@ function buildFinancialReportSections(ym, mFrom, mTo, serviceGross, opex) {
     +'<div class="panel-head"><div class="panel-title">💰 Petty Cash Reconciliation</div></div>'
     +'<div class="panel-body">'
     +'<div class="stats-grid" style="grid-template-columns:repeat(auto-fill,minmax(130px,1fr));margin-bottom:12px">'
-    +'<div class="stat-card stat-gold" style="padding:12px"><div class="stat-label">Allocation</div><div class="stat-value" style="font-size:16px">₱'+pcData.allocation.toLocaleString()+'</div></div>'
-    +'<div class="stat-card stat-danger" style="padding:12px"><div class="stat-label">Released</div><div class="stat-value" style="font-size:16px;color:var(--danger)">₱'+pcData.released.toLocaleString()+'</div></div>'
-    +'<div class="stat-card stat-success" style="padding:12px"><div class="stat-label">Liquidated</div><div class="stat-value" style="font-size:16px;color:var(--success)">₱'+pcData.liquidated.toLocaleString()+'</div></div>'
-    +'<div class="stat-card stat-info" style="padding:12px"><div class="stat-label">Balance</div><div class="stat-value" style="font-size:16px">₱'+pcData.balance.toLocaleString()+'</div></div>'
+    +'<div class="stat-card stat-gold" style="padding:12px"><div class="stat-label">Allocation</div><div class="stat-value" style="font-size:16px">₱'+(pcData.alloc||0).toLocaleString()+'</div></div>'
+    +'<div class="stat-card stat-danger" style="padding:12px"><div class="stat-label">Released</div><div class="stat-value" style="font-size:16px;color:var(--danger)">₱'+(pcData.released||0).toLocaleString()+'</div></div>'
+    +'<div class="stat-card stat-success" style="padding:12px"><div class="stat-label">Liquidated</div><div class="stat-value" style="font-size:16px;color:var(--success)">₱'+(pcData.liquidated||0).toLocaleString()+'</div></div>'
+    +'<div class="stat-card stat-info" style="padding:12px"><div class="stat-label">Balance</div><div class="stat-value" style="font-size:16px">₱'+(pcData.balance||0).toLocaleString()+'</div></div>'
     +'</div>'
     +(unliquidated>0 ? '<div style="padding:8px 12px;background:var(--warning-soft);border:1px solid var(--warning);border-radius:8px;font-size:12px;color:var(--warning);margin-bottom:8px">⚠️ Unliquidated releases: <strong>₱'+unliquidated.toLocaleString()+'</strong></div>' : '')
     +'<div style="font-size:11px;color:var(--text-dim)">'+pcTxns.length+' transaction'+(pcTxns.length!==1?'s':'')+' this period</div>'
