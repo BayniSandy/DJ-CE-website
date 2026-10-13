@@ -1163,6 +1163,7 @@ let ACCT_EMPLOYEES = []; // { id, name, role, type:'fixed'|'commission'|'oncall'
 let ACCT_DAILY_LOG = []; // { id, date, employeeId, jobsDone, classification:'half'|'full'|'ot', auditedBy, notes }
 let ACCT_PAYROLL = [];   // { id, period, employeeId, daysWorked, halfDays, fullDays, otDays, gross, deductions, net, status:'draft'|'released' }
 let ACCT_INVESTORS = []; // { id, name, percentage, notes }
+let INVESTOR_DEPOSITS = []; // { id, investorId, date, amount, description, method }
 let ACCT_13TH_MONTH = []; // { id, employeeId, year, monthly:[], total, status:'accumulating'|'released' }
 let ACCT_TARGETS = {};   // { '2026-01': { target: 50000, notes: '' }, ... } keyed by YYYY-MM
 let ACCT_COMMISSIONS = []; // { id, bookingId, referredBy, type:'new'|'repeat'|'follow-up', grossProfit, rate, amount, status:'pending'|'approved', approvedDate, month }
@@ -1172,8 +1173,8 @@ let PETTY_CASH_CONFIG = { monthlyAllocation: 5000 }; // configurable monthly pet
 let _acctTab = 'employees'; // current accounting sub-tab
 
 // Unit Sales module data (localStorage)
-let UNIT_PRODUCTS = [];  // { id, brand, model, type, hp, price, stock, notes }
-let UNIT_SALES = [];     // { id, date, productId, qty, unitPrice, totalPrice, buyer, phone, notes, soldBy }
+let UNIT_PRODUCTS = [];  // { id, brand, model, type, hp, price, costPrice, stock, serialNumbers:[], fundingSource:'Regular'|'Investor', notes }
+let UNIT_SALES = [];     // { id, date, productId, qty, unitPrice, totalPrice, costPrice, buyer, phone, notes, soldBy, serialNumber }
 
 // Phase 4 data
 let COMM_LOG = [];       // { id, bookingId, clientName, type:'call'|'text'|'email'|'fb', direction:'in'|'out', summary, date, by }
@@ -5886,6 +5887,7 @@ function loadAcctData() {
     ACCT_PETTY_CASH = JSON.parse(localStorage.getItem('djce_petty_cash')||'[]');
     var savedPCConfig = JSON.parse(localStorage.getItem('djce_petty_cash_config')||'null');
     if (savedPCConfig) PETTY_CASH_CONFIG = savedPCConfig;
+    INVESTOR_DEPOSITS = JSON.parse(localStorage.getItem('djce_investor_deposits')||'[]');
   } catch(e) { console.warn('loadAcctData err', e); }
 }
 function saveAcctData() {
@@ -5902,6 +5904,7 @@ function saveAcctData() {
     localStorage.setItem('djce_commission_rates',JSON.stringify(COMMISSION_RATES));
     localStorage.setItem('djce_petty_cash',JSON.stringify(ACCT_PETTY_CASH));
     localStorage.setItem('djce_petty_cash_config',JSON.stringify(PETTY_CASH_CONFIG));
+    localStorage.setItem('djce_investor_deposits',JSON.stringify(INVESTOR_DEPOSITS));
   } catch(e) { console.warn('saveAcctData err', e); }
 }
 
@@ -6520,15 +6523,50 @@ function renderAcctInvestors() {
       +'<div style="margin-top:12px;font-size:11.5px;color:var(--text-dim);text-align:right">Total allocation: <strong>'+totalPct+'%</strong>'+(totalPct>100?' ⚠️ Over 100%!':'')+'</div>';
   }
 
-  return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:16px">'
-    +'<div class="stat-card stat-gold"><div class="stat-icon">💰</div><div class="stat-label">'+yr+' Gross</div><div class="stat-value" style="font-size:16px;color:var(--accent)">₱'+yrGross.toLocaleString()+'</div></div>'
-    +'<div class="stat-card stat-danger"><div class="stat-icon">💸</div><div class="stat-label">'+yr+' OPEX</div><div class="stat-value" style="font-size:16px;color:var(--danger)">₱'+yrExp.toLocaleString()+'</div></div>'
-    +'<div class="stat-card '+(yrNet>=0?'stat-success':'stat-danger')+'"><div class="stat-icon">'+(yrNet>=0?'📈':'📉')+'</div><div class="stat-label">'+yr+' Net Profit</div><div class="stat-value" style="font-size:16px;color:var(--'+(yrNet>=0?'success':'danger')+')">₱'+yrNet.toLocaleString()+'</div></div>'
+  // Capital deposits section
+  var totalCapital = INVESTOR_DEPOSITS.reduce(function(s,d){return s+(parseFloat(d.amount)||0);},0);
+  var invFundedProducts = UNIT_PRODUCTS.filter(function(p){return p.fundingSource==='Investor';});
+  var invInventoryValue = invFundedProducts.reduce(function(s,p){return s+((parseFloat(p.costPrice)||0)*(parseInt(p.stock)||0));},0);
+  var invSales = UNIT_SALES.filter(function(sl){var prod=UNIT_PRODUCTS.find(function(p){return p.id===sl.productId;});return prod&&prod.fundingSource==='Investor';});
+  var invRevenue = invSales.reduce(function(s,sl){return s+(parseFloat(sl.totalPrice)||0);},0);
+  var invCOGS = invSales.reduce(function(s,sl){return s+((parseFloat(sl.costPrice)||0)*(parseInt(sl.qty)||1));},0);
+  var invGrossProfit = invRevenue - invCOGS;
+
+  var depositHtml = '';
+  if (!INVESTOR_DEPOSITS.length) {
+    depositHtml = '<div class="empty" style="padding:14px"><div class="empty-ic">🏦</div>No capital deposits recorded yet.</div>';
+  } else {
+    var depByInvestor = {};
+    INVESTOR_DEPOSITS.forEach(function(d){
+      var inv = ACCT_INVESTORS.find(function(i){return i.id===d.investorId;});
+      var name = inv?inv.name:(d.investorId||'Unknown');
+      if(!depByInvestor[name]) depByInvestor[name]=0;
+      depByInvestor[name]+=(parseFloat(d.amount)||0);
+    });
+    depositHtml = '<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Investor</th><th>Description</th><th>Method</th><th style="text-align:right">Amount</th><th></th></tr></thead><tbody>'
+      +INVESTOR_DEPOSITS.slice().sort(function(a,b){return (b.date||'').localeCompare(a.date||'');}).map(function(d){
+        var inv = ACCT_INVESTORS.find(function(i){return i.id===d.investorId;});
+        return '<tr><td>'+formatDate(d.date)+'</td><td>'+(inv?inv.name:d.investorId)+'</td><td>'+(d.description||'—')+'</td><td>'+(d.method||'Cash')+'</td>'
+          +'<td style="text-align:right;font-weight:700;color:var(--success)">₱'+(parseFloat(d.amount)||0).toLocaleString()+'</td>'
+          +'<td><button class="btn btn-danger btn-xs" onclick="deleteDeposit(\''+d.id+'\')">🗑️</button></td></tr>';
+      }).join('')+'</tbody></table></div>';
+  }
+
+  return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:16px">'
+    +'<div class="stat-card stat-gold"><div class="stat-icon">🏦</div><div class="stat-label">Total Capital</div><div class="stat-value" style="font-size:16px">₱'+totalCapital.toLocaleString()+'</div></div>'
+    +'<div class="stat-card stat-info"><div class="stat-icon">📦</div><div class="stat-label">Inv. Inventory</div><div class="stat-value" style="font-size:16px">₱'+invInventoryValue.toLocaleString()+'</div></div>'
+    +'<div class="stat-card stat-success"><div class="stat-icon">🧾</div><div class="stat-label">Inv. Revenue</div><div class="stat-value" style="font-size:16px">₱'+invRevenue.toLocaleString()+'</div></div>'
+    +'<div class="stat-card '+(invGrossProfit>=0?'stat-success':'stat-danger')+'"><div class="stat-icon">'+(invGrossProfit>=0?'📈':'📉')+'</div><div class="stat-label">Inv. Gross Profit</div><div class="stat-value" style="font-size:16px">₱'+invGrossProfit.toLocaleString()+'</div><div class="stat-sub">Revenue − COGS (₱'+invCOGS.toLocaleString()+')</div></div>'
     +'</div>'
-    +'<div class="panel"><div class="panel-head"><div class="panel-title">📊 Investor Shares — '+yr+'</div>'
+    // Capital Deposits panel
+    +'<div class="panel"><div class="panel-head"><div class="panel-title">🏦 Capital Deposits</div>'
+    +'<button class="btn btn-gold btn-sm" onclick="openAddDeposit()">➕ Add Deposit</button></div>'
+    +'<div class="panel-body">'+depositHtml+'</div></div>'
+    // Investor Shares panel
+    +'<div class="panel" style="margin-top:14px"><div class="panel-head"><div class="panel-title">📊 Investor Shares — '+yr+'</div>'
     +'<button class="btn btn-gold btn-sm" onclick="openEditInvestor()">➕ Add Investor</button></div>'
     +'<div class="panel-body">'
-    +'<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">Based on annual Net Profit. Monthly Ipon = Annual Share ÷ 12. Computed from actual bookings and expenses.</div>'
+    +'<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">Based on annual Net Profit from <strong>regular DJC services</strong>. Monthly Ipon = Annual Share ÷ 12. Investor-funded operations tracked separately above.</div>'
     +invHtml
     +'</div></div>';
 }
@@ -6577,6 +6615,46 @@ function deleteInvestor(id) {
   saveAcctData();
   switchAcctTab('investors');
   showToast('Investor removed','info');
+}
+
+function openAddDeposit() {
+  var invOpts = ACCT_INVESTORS.map(function(i){return '<option value="'+i.id+'">'+i.name+'</option>';}).join('');
+  if (!invOpts) { showToast('Add investors first before recording deposits','warning'); return; }
+  var today = new Date().toISOString().split('T')[0];
+  showModal('🏦 Record Capital Deposit',
+    '<div class="form-grid">'
+    +'<div class="field"><label>Investor *</label><select id="dep_inv" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none">'+invOpts+'</select></div>'
+    +'<div class="field"><label>Date *</label><input type="date" id="dep_date" value="'+today+'" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"></div>'
+    +'<div class="field"><label>Amount (₱) *</label><input type="number" id="dep_amt" placeholder="0" min="0" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"></div>'
+    +'<div class="field"><label>Method</label><select id="dep_method" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"><option>Cash</option><option>Bank Transfer</option><option>GCash</option><option>Check</option><option>Other</option></select></div>'
+    +'<div class="field form-full"><label>Description</label><input type="text" id="dep_desc" placeholder="e.g. Initial capital contribution" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none"></div>'
+    +'</div>'
+    +'<button class="btn btn-gold btn-sm" style="margin-top:12px" onclick="saveDeposit()">💾 Save Deposit</button>',
+  '480px');
+}
+
+function saveDeposit() {
+  var invId = document.getElementById('dep_inv').value;
+  var date = document.getElementById('dep_date').value;
+  var amt = parseFloat(document.getElementById('dep_amt').value);
+  var method = document.getElementById('dep_method').value;
+  var desc = (document.getElementById('dep_desc').value||'').trim();
+  if (!invId||!date||!amt||amt<=0) { showToast('Fill in investor, date, and amount','error'); return; }
+  INVESTOR_DEPOSITS.push({ id:'DEP-'+Date.now(), investorId:invId, date:date, amount:amt, description:desc, method:method });
+  saveAcctData();
+  closeModal();
+  var inv = ACCT_INVESTORS.find(function(i){return i.id===invId;});
+  showToast('Deposit recorded: ₱'+amt.toLocaleString()+' from '+(inv?inv.name:'investor'),'success');
+  logActivity('🏦','Capital deposit: ₱'+amt.toLocaleString()+' from '+(inv?inv.name:'investor'),'finance');
+  switchAcctTab('investors');
+}
+
+function deleteDeposit(id) {
+  if (!confirm('Delete this deposit record?')) return;
+  INVESTOR_DEPOSITS = INVESTOR_DEPOSITS.filter(function(x){return x.id!==id;});
+  saveAcctData();
+  switchAcctTab('investors');
+  showToast('Deposit deleted','info');
 }
 
 // ─── TARGETS & SALARY SUB-TAB ────────────────────
@@ -7062,10 +7140,14 @@ function renderUnitInventory() {
       +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
       +'<div><div style="font-weight:700;font-size:14px">'+(p.brand||'')+' '+(p.model||'')+'</div>'
       +'<div style="font-size:11.5px;color:var(--text-dim);margin-top:2px">'+(p.type||'Aircon')+' · '+(p.hp||'—')+' HP</div></div>'
-      +'<div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--accent)">₱'+(parseFloat(p.price)||0).toLocaleString()+'</div></div>'
+      +'<div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--accent)">₱'+(parseFloat(p.price)||0).toLocaleString()+'</div>'
+      +(p.costPrice?'<div style="font-size:11px;color:var(--text-dim)">Cost: ₱'+(parseFloat(p.costPrice)||0).toLocaleString()+'</div>':'')
       +'</div>'
-      +'<div style="margin-top:10px;display:flex;gap:12px;font-size:12px">'
+      +'</div>'
+      +'<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;font-size:12px">'
       +'<span style="font-weight:700;color:'+(lowStock?'var(--danger)':'var(--success)')+'">📦 '+(p.stock||0)+' in stock'+(lowStock?' ⚠️':'')+'</span>'
+      +(p.fundingSource==='Investor'?'<span class="bc-tag" style="background:var(--info-soft);color:var(--info)">💼 Investor</span>':'')
+      +(p.serialNumbers&&p.serialNumbers.length?'<span style="color:var(--text-dim)">🔢 '+p.serialNumbers.length+' serial(s)</span>':'')
       +(p.notes?'<span style="color:var(--text-dim)">📝 '+p.notes+'</span>':'')
       +'</div>'
       +'<div style="margin-top:10px;display:flex;gap:6px">'
@@ -7089,8 +7171,11 @@ function openEditProduct(editId) {
     +['Window Type','Split Type','Inverter Window','Inverter Split','Portable','Other'].map(function(t){return '<option '+(p&&p.type===t?'selected':'')+'>'+t+'</option>';}).join('')
     +'</select></div>'
     +'<div class="field"><label>HP</label><input id="prod_hp" value="'+(p?p.hp||'':'')+'" placeholder="e.g. 1.0, 1.5, 2.0"></div>'
+    +'<div class="field"><label>Cost Price (₱)</label><input type="number" id="prod_cost" value="'+(p?p.costPrice||'':'')+'" placeholder="Supplier cost per unit" min="0"></div>'
     +'<div class="field"><label>Selling Price (₱) *</label><input type="number" id="prod_price" value="'+(p?p.price||'':'')+'" placeholder="0" min="0"></div>'
     +'<div class="field"><label>Stock Qty *</label><input type="number" id="prod_stock" value="'+(p?p.stock||'':'')+'" placeholder="0" min="0"></div>'
+    +'<div class="field"><label>Funding Source</label><select id="prod_fund"><option value="Regular" '+(p&&p.fundingSource==='Regular'?'selected':'')+'>Regular (DJC)</option><option value="Investor" '+(p&&p.fundingSource==='Investor'?'selected':'')+'>Investor-Funded</option></select></div>'
+    +'<div class="field form-full"><label>Serial Numbers</label><textarea id="prod_serials" rows="3" placeholder="One serial per line (e.g. SN-2026-001)" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none;resize:vertical">'+(p&&p.serialNumbers?p.serialNumbers.join('\\n'):'')+'</textarea></div>'
     +'<div class="field form-full"><label>Notes</label><input id="prod_notes" value="'+(p?p.notes||'':'')+'" placeholder="e.g. with free installation"></div>'
     +'</div>';
   document.getElementById('expModalTitle').textContent = p ? 'Edit Product' : 'Add Product';
@@ -7105,12 +7190,17 @@ function saveProduct(editId) {
   var brand = (document.getElementById('prod_brand').value||'').trim();
   var model = (document.getElementById('prod_model').value||'').trim();
   if (!brand||!model) { showToast('Brand and Model are required','warning'); return; }
+  var serialsRaw = (document.getElementById('prod_serials').value||'').trim();
+  var serials = serialsRaw ? serialsRaw.split('\n').map(function(s){return s.trim();}).filter(Boolean) : [];
   var data = {
     brand: brand, model: model,
     type: document.getElementById('prod_type').value,
     hp: (document.getElementById('prod_hp').value||'').trim(),
+    costPrice: parseFloat(document.getElementById('prod_cost').value)||0,
     price: parseFloat(document.getElementById('prod_price').value)||0,
     stock: parseInt(document.getElementById('prod_stock').value)||0,
+    fundingSource: document.getElementById('prod_fund').value||'Regular',
+    serialNumbers: serials,
     notes: (document.getElementById('prod_notes').value||'').trim()
   };
   if (editId) {
@@ -7312,6 +7402,7 @@ function openRecordSale(prodId) {
     +'<div class="field"><label>Product *</label><select id="sale_prod">'+prodOptions+'</select></div>'
     +'<div class="field"><label>Quantity *</label><input type="number" id="sale_qty" value="1" min="1"></div>'
     +'<div class="field"><label>Unit Price (₱)</label><input type="number" id="sale_price" value="'+(prodId?((UNIT_PRODUCTS.find(function(p){return p.id===prodId;})||{}).price||0):'')+'"></div>'
+    +'<div class="field"><label>Serial Number</label><select id="sale_serial"><option value="">— Select if applicable —</option></select></div>'
     +'<div class="field"><label>Buyer Name *</label><input id="sale_buyer" placeholder="Customer name"></div>'
     +'<div class="field"><label>Phone</label><input id="sale_phone" placeholder="Optional"></div>'
     +'<div class="field form-full"><label>Notes</label><input id="sale_notes" placeholder="e.g. with installation, warranty"></div>'
@@ -7321,11 +7412,26 @@ function openRecordSale(prodId) {
   document.getElementById('expModalFoot').innerHTML =
     '<button class="btn btn-outline btn-sm" onclick="closeModal(\'expenseModal\')">Cancel</button>'
     +'<button class="btn btn-gold btn-sm" onclick="saveSale()">💾 Save Sale</button>';
+  // Populate serial numbers
+  function updateSaleSerials() {
+    var sp = UNIT_PRODUCTS.find(function(p){return p.id===document.getElementById('sale_prod').value;});
+    var sel = document.getElementById('sale_serial');
+    sel.innerHTML = '<option value="">— Select if applicable —</option>';
+    if (sp && sp.serialNumbers && sp.serialNumbers.length) {
+      // Filter out already-sold serials
+      var soldSerials = UNIT_SALES.filter(function(s){return s.productId===sp.id&&s.serialNumber;}).map(function(s){return s.serialNumber;});
+      sp.serialNumbers.forEach(function(sn){
+        if (soldSerials.indexOf(sn)<0) sel.innerHTML += '<option value="'+sn+'">'+sn+'</option>';
+      });
+    }
+  }
   // Auto-fill price when product changes
   document.getElementById('sale_prod').addEventListener('change', function(){
     var selProd = UNIT_PRODUCTS.find(function(p){return p.id===document.getElementById('sale_prod').value;});
     if (selProd) document.getElementById('sale_price').value = selProd.price;
+    updateSaleSerials();
   });
+  updateSaleSerials();
   // Set initial price if product pre-selected
   if (!prodId && UNIT_PRODUCTS.length) {
     document.getElementById('sale_price').value = UNIT_PRODUCTS[0].price;
@@ -7343,6 +7449,7 @@ function saveSale() {
   if (!prod) { showToast('Product not found','warning'); return; }
   if (qty > (parseInt(prod.stock)||0)) { showToast('Not enough stock! Only '+prod.stock+' available.','warning'); return; }
   var unitPrice = parseFloat(document.getElementById('sale_price').value)||prod.price;
+  var serialNum = (document.getElementById('sale_serial')||{}).value||'';
   var sale = {
     id: 'SALE-'+Date.now(),
     date: date,
@@ -7350,10 +7457,12 @@ function saveSale() {
     qty: qty,
     unitPrice: unitPrice,
     totalPrice: unitPrice * qty,
+    costPrice: parseFloat(prod.costPrice)||0,
     buyer: buyer,
     phone: (document.getElementById('sale_phone').value||'').trim(),
     notes: (document.getElementById('sale_notes').value||'').trim(),
-    soldBy: session.name
+    soldBy: session.name,
+    serialNumber: serialNum
   };
   UNIT_SALES.push(sale);
   // Deduct stock
