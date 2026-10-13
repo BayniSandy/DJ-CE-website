@@ -5556,7 +5556,168 @@ function buildReportsContent(ym) {
     </div>
   </div>
 
-  ${opexDetailHtml}`;
+  ${opexDetailHtml}
+
+  ${buildFinancialReportSections(ym, mFrom, mTo, gross, opex)}`;
+}
+
+function buildFinancialReportSections(ym, mFrom, mTo, serviceGross, opex) {
+  var sections = '';
+  var warnings = [];
+
+  // --- Payroll Costs ---
+  var mPayroll = ACCT_PAYROLL.filter(function(p){return p.period && p.period.substring(0,7)===ym;});
+  var totalPayrollGross = mPayroll.reduce(function(s,p){return s+(parseFloat(p.gross)||0);},0);
+  var totalPayrollNet = mPayroll.reduce(function(s,p){return s+(parseFloat(p.net)||0);},0);
+  var totalDeductions = mPayroll.reduce(function(s,p){return s+(parseFloat(p.deductions)||0);},0);
+  var payrollRows = '';
+  if (mPayroll.length) {
+    payrollRows = mPayroll.map(function(p){
+      return '<tr><td>'+((DEFAULT_ACCOUNTS.find(function(a){return a.username===p.employeeId;})||{}).name||p.employeeId)+'</td>'
+        +'<td style="text-align:center">'+(p.daysWorked||0)+'</td>'
+        +'<td style="text-align:right">₱'+(parseFloat(p.gross)||0).toLocaleString()+'</td>'
+        +'<td style="text-align:right;color:var(--danger)">₱'+(parseFloat(p.deductions)||0).toLocaleString()+'</td>'
+        +'<td style="text-align:right;font-weight:700">₱'+(parseFloat(p.net)||0).toLocaleString()+'</td>'
+        +'<td><span class="bc-tag" style="background:'+(p.status==='released'?'var(--success-soft);color:var(--success)':'var(--warning-soft);color:var(--warning)')+'">'+((p.status||'draft').charAt(0).toUpperCase()+(p.status||'draft').slice(1))+'</span></td></tr>';
+    }).join('');
+  }
+  if (!mPayroll.length) warnings.push('No payroll records for this month');
+
+  sections += '<div class="panel" style="margin-bottom:18px">'
+    +'<div class="panel-head"><div class="panel-title">👷 Payroll Summary</div><div class="panel-subtitle">Employee payroll costs for the period</div></div>'
+    +'<div class="panel-body">'
+    +'<div class="stats-grid" style="grid-template-columns:repeat(auto-fill,minmax(130px,1fr));margin-bottom:12px">'
+    +'<div class="stat-card stat-info" style="padding:12px"><div class="stat-label">Payslips</div><div class="stat-value" style="font-size:20px">'+mPayroll.length+'</div></div>'
+    +'<div class="stat-card stat-gold" style="padding:12px"><div class="stat-label">Gross Pay</div><div class="stat-value" style="font-size:16px;color:var(--accent)">₱'+totalPayrollGross.toLocaleString()+'</div></div>'
+    +'<div class="stat-card stat-danger" style="padding:12px"><div class="stat-label">Deductions</div><div class="stat-value" style="font-size:16px;color:var(--danger)">₱'+totalDeductions.toLocaleString()+'</div></div>'
+    +'<div class="stat-card stat-success" style="padding:12px"><div class="stat-label">Net Payroll</div><div class="stat-value" style="font-size:16px;color:var(--success)">₱'+totalPayrollNet.toLocaleString()+'</div></div>'
+    +'</div>'
+    +(mPayroll.length ? '<div class="tbl-wrap"><table><thead><tr><th>Employee</th><th style="text-align:center">Days</th><th style="text-align:right">Gross</th><th style="text-align:right">Deductions</th><th style="text-align:right">Net</th><th>Status</th></tr></thead><tbody>'+payrollRows+'</tbody></table></div>' : '<div class="empty" style="padding:10px">No payroll records this month</div>')
+    +'</div></div>';
+
+  // --- Petty Cash Reconciliation ---
+  var pcData = (typeof getPettyCashMonth==='function') ? getPettyCashMonth(ym) : {allocation:0,released:0,liquidated:0,replenished:0,balance:0,unspent:0};
+  var pcTxns = ACCT_PETTY_CASH.filter(function(t){return (t.month||'')===ym || (t.date&&t.date.substring(0,7)===ym);});
+  var unliquidated = pcData.released - pcData.liquidated;
+
+  sections += '<div class="panel" style="margin-bottom:18px">'
+    +'<div class="panel-head"><div class="panel-title">💰 Petty Cash Reconciliation</div></div>'
+    +'<div class="panel-body">'
+    +'<div class="stats-grid" style="grid-template-columns:repeat(auto-fill,minmax(130px,1fr));margin-bottom:12px">'
+    +'<div class="stat-card stat-gold" style="padding:12px"><div class="stat-label">Allocation</div><div class="stat-value" style="font-size:16px">₱'+pcData.allocation.toLocaleString()+'</div></div>'
+    +'<div class="stat-card stat-danger" style="padding:12px"><div class="stat-label">Released</div><div class="stat-value" style="font-size:16px;color:var(--danger)">₱'+pcData.released.toLocaleString()+'</div></div>'
+    +'<div class="stat-card stat-success" style="padding:12px"><div class="stat-label">Liquidated</div><div class="stat-value" style="font-size:16px;color:var(--success)">₱'+pcData.liquidated.toLocaleString()+'</div></div>'
+    +'<div class="stat-card stat-info" style="padding:12px"><div class="stat-label">Balance</div><div class="stat-value" style="font-size:16px">₱'+pcData.balance.toLocaleString()+'</div></div>'
+    +'</div>'
+    +(unliquidated>0 ? '<div style="padding:8px 12px;background:var(--warning-soft);border:1px solid var(--warning);border-radius:8px;font-size:12px;color:var(--warning);margin-bottom:8px">⚠️ Unliquidated releases: <strong>₱'+unliquidated.toLocaleString()+'</strong></div>' : '')
+    +'<div style="font-size:11px;color:var(--text-dim)">'+pcTxns.length+' transaction'+(pcTxns.length!==1?'s':'')+' this period</div>'
+    +'</div></div>';
+
+  // --- Commissions ---
+  var mComm = ACCT_COMMISSIONS.filter(function(c){return (c.month||'')===ym;});
+  var pendingComm = mComm.filter(function(c){return c.status==='pending';});
+  var approvedComm = mComm.filter(function(c){return c.status==='approved';});
+  var totalPendingAmt = pendingComm.reduce(function(s,c){return s+(parseFloat(c.amount)||0);},0);
+  var totalApprovedAmt = approvedComm.reduce(function(s,c){return s+(parseFloat(c.amount)||0);},0);
+  var totalCommAmt = mComm.reduce(function(s,c){return s+(parseFloat(c.amount)||0);},0);
+
+  sections += '<div class="panel" style="margin-bottom:18px">'
+    +'<div class="panel-head"><div class="panel-title">💵 Commissions (Mama)</div></div>'
+    +'<div class="panel-body">'
+    +'<div class="stats-grid" style="grid-template-columns:repeat(auto-fill,minmax(130px,1fr));margin-bottom:8px">'
+    +'<div class="stat-card stat-gold" style="padding:12px"><div class="stat-label">Total</div><div class="stat-value" style="font-size:16px">₱'+totalCommAmt.toLocaleString()+'</div><div class="stat-sub">'+mComm.length+' commission'+(mComm.length!==1?'s':'')+'</div></div>'
+    +'<div class="stat-card stat-warning" style="padding:12px"><div class="stat-label">Pending</div><div class="stat-value" style="font-size:16px;color:var(--warning)">₱'+totalPendingAmt.toLocaleString()+'</div><div class="stat-sub">'+pendingComm.length+' awaiting</div></div>'
+    +'<div class="stat-card stat-success" style="padding:12px"><div class="stat-label">Approved</div><div class="stat-value" style="font-size:16px;color:var(--success)">₱'+totalApprovedAmt.toLocaleString()+'</div><div class="stat-sub">'+approvedComm.length+' approved</div></div>'
+    +'</div>'
+    +'</div></div>';
+
+  // --- Investor P&L ---
+  if (ACCT_INVESTORS.length) {
+    var invProducts = UNIT_PRODUCTS.filter(function(p){return p.fundingSource==='Investor';});
+    var mInvSales = UNIT_SALES.filter(function(sl){
+      if (!sl.date || sl.date<mFrom || sl.date>mTo) return false;
+      var prod = UNIT_PRODUCTS.find(function(p){return p.id===sl.productId;});
+      return prod && prod.fundingSource==='Investor';
+    });
+    var invRevenue = mInvSales.reduce(function(s,sl){return s+(parseFloat(sl.totalPrice)||0);},0);
+    var invCOGS = mInvSales.reduce(function(s,sl){return s+(parseFloat(sl.costPrice)||0)*(parseInt(sl.qty)||1);},0);
+    var invGrossProfit = invRevenue - invCOGS;
+    var mDeposits = INVESTOR_DEPOSITS.filter(function(d){return d.date&&d.date>=mFrom&&d.date<=mTo;});
+    var mDepositTotal = mDeposits.reduce(function(s,d){return s+(parseFloat(d.amount)||0);},0);
+
+    sections += '<div class="panel" style="margin-bottom:18px">'
+      +'<div class="panel-head"><div class="panel-title">📊 Investor P&L</div><div class="panel-subtitle">Investor-funded product performance this month</div></div>'
+      +'<div class="panel-body">'
+      +'<div class="stats-grid" style="grid-template-columns:repeat(auto-fill,minmax(130px,1fr));margin-bottom:8px">'
+      +'<div class="stat-card stat-gold" style="padding:12px"><div class="stat-label">Revenue</div><div class="stat-value" style="font-size:16px;color:var(--accent)">₱'+invRevenue.toLocaleString()+'</div><div class="stat-sub">'+mInvSales.length+' sale'+(mInvSales.length!==1?'s':'')+'</div></div>'
+      +'<div class="stat-card stat-danger" style="padding:12px"><div class="stat-label">COGS</div><div class="stat-value" style="font-size:16px;color:var(--danger)">₱'+invCOGS.toLocaleString()+'</div></div>'
+      +'<div class="stat-card '+(invGrossProfit>=0?'stat-success':'stat-danger')+'" style="padding:12px"><div class="stat-label">Gross Profit</div><div class="stat-value" style="font-size:16px;color:var(--'+(invGrossProfit>=0?'success':'danger')+')">₱'+invGrossProfit.toLocaleString()+'</div></div>'
+      +'<div class="stat-card stat-info" style="padding:12px"><div class="stat-label">Capital In</div><div class="stat-value" style="font-size:16px">₱'+mDepositTotal.toLocaleString()+'</div><div class="stat-sub">'+mDeposits.length+' deposit'+(mDeposits.length!==1?'s':'')+'</div></div>'
+      +'</div>'
+      +'<div style="font-size:11px;color:var(--text-dim)">'+invProducts.length+' investor-funded product'+(invProducts.length!==1?'s':'')+' in inventory</div>'
+      +'</div></div>';
+  }
+
+  // --- Unit Sales Summary ---
+  var mSales = UNIT_SALES.filter(function(sl){return sl.date&&sl.date>=mFrom&&sl.date<=mTo;});
+  if (mSales.length) {
+    var salesRev = mSales.reduce(function(s,sl){return s+(parseFloat(sl.totalPrice)||0);},0);
+    var salesCOGS = mSales.reduce(function(s,sl){return s+(parseFloat(sl.costPrice)||0)*(parseInt(sl.qty)||1);},0);
+    sections += '<div class="panel" style="margin-bottom:18px">'
+      +'<div class="panel-head"><div class="panel-title">📦 Unit Sales</div></div>'
+      +'<div class="panel-body">'
+      +'<div class="stats-grid" style="grid-template-columns:repeat(auto-fill,minmax(130px,1fr));margin-bottom:8px">'
+      +'<div class="stat-card stat-gold" style="padding:12px"><div class="stat-label">Units Sold</div><div class="stat-value" style="font-size:20px">'+mSales.reduce(function(s,sl){return s+(parseInt(sl.qty)||1);},0)+'</div></div>'
+      +'<div class="stat-card stat-success" style="padding:12px"><div class="stat-label">Sales Revenue</div><div class="stat-value" style="font-size:16px;color:var(--accent)">₱'+salesRev.toLocaleString()+'</div></div>'
+      +'<div class="stat-card stat-danger" style="padding:12px"><div class="stat-label">COGS</div><div class="stat-value" style="font-size:16px;color:var(--danger)">₱'+salesCOGS.toLocaleString()+'</div></div>'
+      +'<div class="stat-card '+(salesRev-salesCOGS>=0?'stat-success':'stat-danger')+'" style="padding:12px"><div class="stat-label">Margin</div><div class="stat-value" style="font-size:16px;color:var(--'+(salesRev-salesCOGS>=0?'success':'danger')+')">₱'+(salesRev-salesCOGS).toLocaleString()+'</div></div>'
+      +'</div></div></div>';
+  }
+
+  // --- Combined P&L Summary ---
+  var totalSalesRev = mSales.reduce(function(s,sl){return s+(parseFloat(sl.totalPrice)||0);},0);
+  var totalSalesCOGS = mSales.reduce(function(s,sl){return s+(parseFloat(sl.costPrice)||0)*(parseInt(sl.qty)||1);},0);
+  var combinedGross = serviceGross + totalSalesRev;
+  var combinedCosts = opex + totalPayrollNet + totalApprovedAmt + pcData.released + totalSalesCOGS;
+  var combinedNet = combinedGross - combinedCosts;
+
+  sections += '<div class="panel" style="margin-bottom:18px;border:2px solid var(--accent)">'
+    +'<div class="panel-head" style="background:var(--accent-soft)"><div class="panel-title">📋 Combined Financial Summary</div><div class="panel-subtitle">All revenue streams vs all costs</div></div>'
+    +'<div class="panel-body">'
+    +'<div class="tbl-wrap"><table>'
+    +'<thead><tr><th>Item</th><th style="text-align:right">Amount</th></tr></thead>'
+    +'<tbody>'
+    +'<tr><td><strong>💼 Service Revenue</strong> (completed jobs)</td><td style="text-align:right;color:var(--success);font-weight:700">₱'+serviceGross.toLocaleString()+'</td></tr>'
+    +(totalSalesRev>0?'<tr><td><strong>📦 Unit Sales Revenue</strong></td><td style="text-align:right;color:var(--success);font-weight:700">₱'+totalSalesRev.toLocaleString()+'</td></tr>':'')
+    +'<tr style="border-top:2px solid var(--border);font-weight:700"><td>Total Revenue</td><td style="text-align:right;color:var(--accent)">₱'+combinedGross.toLocaleString()+'</td></tr>'
+    +'<tr><td colspan="2" style="padding-top:12px;font-weight:700;color:var(--text-dim)">Costs & Disbursements</td></tr>'
+    +'<tr><td>💸 Operating Expenses (OPEX)</td><td style="text-align:right;color:var(--danger)">₱'+opex.toLocaleString()+'</td></tr>'
+    +(totalPayrollNet>0?'<tr><td>👷 Payroll (Net)</td><td style="text-align:right;color:var(--danger)">₱'+totalPayrollNet.toLocaleString()+'</td></tr>':'')
+    +(totalApprovedAmt>0?'<tr><td>💵 Commissions (Approved)</td><td style="text-align:right;color:var(--danger)">₱'+totalApprovedAmt.toLocaleString()+'</td></tr>':'')
+    +(pcData.released>0?'<tr><td>💰 Petty Cash Released</td><td style="text-align:right;color:var(--danger)">₱'+pcData.released.toLocaleString()+'</td></tr>':'')
+    +(totalSalesCOGS>0?'<tr><td>📦 Cost of Goods Sold</td><td style="text-align:right;color:var(--danger)">₱'+totalSalesCOGS.toLocaleString()+'</td></tr>':'')
+    +'<tr style="border-top:2px solid var(--border);font-weight:700"><td>Total Costs</td><td style="text-align:right;color:var(--danger)">₱'+combinedCosts.toLocaleString()+'</td></tr>'
+    +'<tr style="border-top:3px double var(--border);font-size:15px;font-weight:700"><td>'+(combinedNet>=0?'📈':'📉')+' NET INCOME</td><td style="text-align:right;color:var(--'+(combinedNet>=0?'success':'danger')+')">₱'+combinedNet.toLocaleString()+'</td></tr>'
+    +'</tbody></table></div>'
+    +'</div></div>';
+
+  // --- Missing Data Flags ---
+  if (!mPayroll.length) warnings.push('No payroll records — labor costs not reflected');
+  if (ACCT_COMMISSIONS.filter(function(c){return (c.month||'')===ym && c.status==='pending';}).length) warnings.push('Pending commissions — not yet included in approved costs');
+  var salesNoCost = mSales.filter(function(sl){return !sl.costPrice && sl.costPrice!==0;});
+  if (salesNoCost.length) warnings.push(salesNoCost.length+' unit sale'+(salesNoCost.length!==1?'s':'')+' missing cost price — margins may be inaccurate');
+  var prodsNoCost = UNIT_PRODUCTS.filter(function(p){return p.stock>0 && !p.costPrice && p.costPrice!==0;});
+  if (prodsNoCost.length) warnings.push(prodsNoCost.length+' product'+(prodsNoCost.length!==1?'s':'')+' in stock without cost price set');
+
+  if (warnings.length) {
+    sections += '<div class="panel" style="margin-bottom:18px;border:1.5px solid var(--warning)">'
+      +'<div class="panel-head" style="background:var(--warning-soft)"><div class="panel-title">⚠️ Data Completeness Flags</div></div>'
+      +'<div class="panel-body">'
+      +warnings.map(function(w){return '<div style="padding:6px 0;font-size:12px;color:var(--warning);border-bottom:1px solid var(--border)">⚠️ '+w+'</div>';}).join('')
+      +'</div></div>';
+  }
+
+  return sections;
 }
 
 /* ===========================
