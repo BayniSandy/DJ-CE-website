@@ -3074,12 +3074,14 @@ function renderSchedule() {
                 style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none">
             </div>
             <div class="field">
-              <label>Time Slot</label>
-              <select id="slotTime" style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none">
-                <option value="morning">☀️ Morning (9:00 AM – 12:00 PM)</option>
-                <option value="afternoon">🌤️ Afternoon (1:00 PM – 4:00 PM)</option>
-                <option value="evening">🌆 Evening (5:00 PM – 7:00 PM)</option>
-              </select>
+              <label>Start Time</label>
+              <input type="time" id="slotStartTime" value="09:00"
+                style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none">
+            </div>
+            <div class="field">
+              <label>End Time</label>
+              <input type="time" id="slotEndTime" value="12:00"
+                style="width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;outline:none">
             </div>
             <div class="field">
               <label>Max Bookings for this slot</label>
@@ -3125,7 +3127,7 @@ function switchSchedTab(tab) {
 function buildSlotListHtml() {
   const today = new Date().toISOString().split('T')[0];
   const slots = SCHEDULE_SLOTS.filter(s => s.date >= today)
-    .sort((a,b) => a.date!==b.date ? a.date.localeCompare(b.date) : ['morning','afternoon','evening'].indexOf(a.timeSlot) - ['morning','afternoon','evening'].indexOf(b.timeSlot));
+    .sort((a,b) => a.date!==b.date ? a.date.localeCompare(b.date) : (a.timeSlot||'').localeCompare(b.timeSlot||''));
 
   if (!slots.length) {
     return '<div class="empty"><div class="empty-ic">🗓️</div><p>No open slots. Use the form above to open dates for booking.</p></div>';
@@ -3138,9 +3140,6 @@ function buildSlotListHtml() {
   const byDate = {};
   slots.forEach(s => { if (!byDate[s.date]) byDate[s.date]=[]; byDate[s.date].push(s); });
 
-  const slotColors = { morning:'#f59e0b', afternoon:'#3b82f6', evening:'#8b5cf6' };
-  const slotIcons  = { morning:'☀️', afternoon:'🌤️', evening:'🌆' };
-
   return Object.keys(byDate).sort().map(function(date) {
     const isToday = date === today;
     const dateLabel = new Date(date+'T00:00:00').toLocaleDateString('en-PH',{weekday:'long',month:'long',day:'numeric'});
@@ -3149,9 +3148,9 @@ function buildSlotListHtml() {
       const isFull = s.status==='Full' || s.remaining<=0;
       const isClosed = s.status==='Closed';
       return '<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--bg-elev2);border-radius:10px;margin-bottom:8px;border:1px solid var(--border)">'
-        +'<div style="font-size:20px">'+slotIcons[s.timeSlot]+'</div>'
+        +'<div style="font-size:20px">🕐</div>'
         +'<div style="flex:1">'
-          +'<div style="font-size:13px;font-weight:700;color:'+slotColors[s.timeSlot]+'">'+s.label+' · <span style="font-weight:400;color:var(--text-dim);font-size:12px">'+s.time+'</span></div>'
+          +'<div style="font-size:13px;font-weight:700;color:var(--accent)">'+(s.label||s.timeSlot)+' · <span style="font-weight:400;color:var(--text-dim);font-size:12px">'+(s.time||s.timeSlot)+'</span></div>'
           +'<div style="display:flex;align-items:center;gap:8px;margin-top:4px">'
             +'<div style="flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden;max-width:120px"><div style="height:100%;width:'+pct+'%;background:'+(isFull?'var(--danger)':'var(--success)')+';border-radius:3px"></div></div>'
             +'<span style="font-size:11.5px;color:var(--text-dim)">'+s.currentBookings+'/'+s.maxBookings+' booked'+(s.notes?' · '+s.notes:'')+'</span>'
@@ -3180,30 +3179,41 @@ function buildSlotListHtml() {
   }).join('');
 }
 
+function formatTime12(t24) {
+  if (!t24) return '';
+  var parts = t24.split(':');
+  var h = parseInt(parts[0]); var m = parts[1];
+  var ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return h + ':' + m + ' ' + ampm;
+}
+
 async function openNewSlot() {
   const date  = document.getElementById('slotDate')?.value;
-  const time  = document.getElementById('slotTime')?.value;
+  const startT = document.getElementById('slotStartTime')?.value;
+  const endT   = document.getElementById('slotEndTime')?.value;
   const max   = parseInt(document.getElementById('slotMax')?.value)||2;
   const notes = document.getElementById('slotNotes')?.value||'';
-  if (!date||!time) { showToast('Select a date and time slot','error'); return; }
+  if (!date||!startT||!endT) { showToast('Select a date, start time and end time','error'); return; }
+  if (startT >= endT) { showToast('End time must be after start time','error'); return; }
+
+  const timeLabel = formatTime12(startT) + ' – ' + formatTime12(endT);
 
   showToast('Opening slot...','info');
   try {
     const res = await callSheets({ action:'openSlot', data: encodeURIComponent(JSON.stringify({
-      date, timeSlot: time, maxBookings: max, notes, createdBy: session.name
+      date, timeSlot: timeLabel, maxBookings: max, notes, createdBy: session.name
     }))});
     if (res && res.ok) {
-      // Add to local SCHEDULE_SLOTS
-      const slotInfo = {morning:{label:'Morning',time:'9:00 AM – 12:00 PM'},afternoon:{label:'Afternoon',time:'1:00 PM – 4:00 PM'},evening:{label:'Evening',time:'5:00 PM – 7:00 PM'}};
-      const existing = SCHEDULE_SLOTS.find(s=>s.date===date&&s.timeSlot===time);
+      const existing = SCHEDULE_SLOTS.find(s=>s.date===date&&s.timeSlot===timeLabel);
       if (existing) {
         existing.status='Open'; existing.maxBookings=max; existing.notes=notes;
         existing.remaining=max-existing.currentBookings;
       } else {
-        SCHEDULE_SLOTS.push({slotId:res.slotId||('SL-'+Date.now()),date,timeSlot:time,label:slotInfo[time].label,time:slotInfo[time].time,maxBookings:max,currentBookings:0,remaining:max,status:'Open',notes});
+        SCHEDULE_SLOTS.push({slotId:res.slotId||('SL-'+Date.now()),date,timeSlot:timeLabel,label:timeLabel,time:timeLabel,maxBookings:max,currentBookings:0,remaining:max,status:'Open',notes});
       }
       showToast('Slot opened! ✅','success');
-      logActivity('🗓️','Opened slot: '+date+' '+time+' (max '+max+')','schedule');
+      logActivity('🗓️','Opened slot: '+date+' '+timeLabel+' (max '+max+')','schedule');
       const body = document.getElementById('slotListBody');
       if (body) body.innerHTML = buildSlotListHtml();
     } else {
@@ -3214,36 +3224,37 @@ async function openNewSlot() {
 
 async function openWeekSlots() {
   const date  = document.getElementById('slotDate')?.value;
+  const startT = document.getElementById('slotStartTime')?.value;
+  const endT   = document.getElementById('slotEndTime')?.value;
   const max   = parseInt(document.getElementById('slotMax')?.value)||2;
   const notes = document.getElementById('slotNotes')?.value||'';
   if (!date) { showToast('Select a start date','error'); return; }
+  if (!startT||!endT) { showToast('Select start and end time','error'); return; }
+  if (startT >= endT) { showToast('End time must be after start time','error'); return; }
 
-  const times = ['morning','afternoon','evening'];
-  const slotInfo = {morning:{label:'Morning',time:'9:00 AM – 12:00 PM'},afternoon:{label:'Afternoon',time:'1:00 PM – 4:00 PM'},evening:{label:'Evening',time:'5:00 PM – 7:00 PM'}};
+  const timeLabel = formatTime12(startT) + ' – ' + formatTime12(endT);
   let opened = 0;
 
-  // Open 7 days × 3 slots
+  // Open 7 days × 1 slot (same time range each day)
   for (let d=0; d<7; d++) {
     const dt = new Date(date+'T00:00:00');
     dt.setDate(dt.getDate()+d);
     const dateStr = dt.toISOString().split('T')[0];
-    for (const t of times) {
-      try {
-        const res = await callSheets({ action:'openSlot', data: encodeURIComponent(JSON.stringify({
-          date:dateStr, timeSlot:t, maxBookings:max, notes, createdBy:session.name
-        }))});
-        if (res && res.ok) {
-          const existing = SCHEDULE_SLOTS.find(s=>s.date===dateStr&&s.timeSlot===t);
-          if (!existing) {
-            SCHEDULE_SLOTS.push({slotId:res.slotId||('SL-'+Date.now()+'-'+t),date:dateStr,timeSlot:t,label:slotInfo[t].label,time:slotInfo[t].time,maxBookings:max,currentBookings:0,remaining:max,status:'Open',notes});
-          } else { existing.status='Open'; existing.maxBookings=max; }
-          opened++;
-        }
-      } catch(e) {}
-    }
+    try {
+      const res = await callSheets({ action:'openSlot', data: encodeURIComponent(JSON.stringify({
+        date:dateStr, timeSlot:timeLabel, maxBookings:max, notes, createdBy:session.name
+      }))});
+      if (res && res.ok) {
+        const existing = SCHEDULE_SLOTS.find(s=>s.date===dateStr&&s.timeSlot===timeLabel);
+        if (!existing) {
+          SCHEDULE_SLOTS.push({slotId:res.slotId||('SL-'+Date.now()+'-'+d),date:dateStr,timeSlot:timeLabel,label:timeLabel,time:timeLabel,maxBookings:max,currentBookings:0,remaining:max,status:'Open',notes});
+        } else { existing.status='Open'; existing.maxBookings=max; }
+        opened++;
+      }
+    } catch(e) {}
   }
   showToast('Opened '+opened+' slots for 7 days! ✅','success');
-  logActivity('🗓️','Opened week of slots from '+date+' (max '+max+'/slot)','schedule');
+  logActivity('🗓️','Opened week of slots from '+date+' '+timeLabel+' (max '+max+'/slot)','schedule');
   const body = document.getElementById('slotListBody');
   if (body) body.innerHTML = buildSlotListHtml();
 }
