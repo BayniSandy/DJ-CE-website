@@ -570,8 +570,8 @@ tr:hover td { background:var(--bg-elev2); }
   .sidebar { transform:translateX(-100%); width:240px; }
   .sidebar.mobile-open { transform:translateX(0); }
   .sidebar-backdrop.active { display:block; }
-  .main { margin-left:0 !important; }
-  .content { padding:16px 18px; }
+  .main { margin-left:0 !important; min-width:0; overflow-x:hidden; width:100%; }
+  .content { padding:16px 18px; min-width:0; overflow-x:hidden; }
   .stats-grid { grid-template-columns:repeat(2,1fr); }
   .topbar { padding:0 16px; }
   #sbCollapseBtn { display:none; }
