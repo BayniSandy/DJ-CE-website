@@ -3295,7 +3295,7 @@ async function openNewSlot() {
   try {
     const res = await callSheets({ action:'openSlot', data: encodeURIComponent(JSON.stringify({
       date, timeSlot: timeLabel, maxBookings: max, notes, createdBy: session.name
-    }))});
+    }))}, 15000);
     if (res && res.ok) {
       const existing = SCHEDULE_SLOTS.find(s=>s.date===date&&s.timeSlot===timeLabel);
       if (existing) {
@@ -3309,7 +3309,7 @@ async function openNewSlot() {
       const body = document.getElementById('slotListBody');
       if (body) body.innerHTML = buildSlotListHtml();
     } else {
-      showToast('Failed to open slot','error');
+      showToast('Failed to open slot'+(res&&res.error?': '+res.error:''),'error');
     }
   } catch(e) { showToast('Error: '+e.message,'error'); }
 }
@@ -3335,7 +3335,7 @@ async function openWeekSlots() {
     try {
       const res = await callSheets({ action:'openSlot', data: encodeURIComponent(JSON.stringify({
         date:dateStr, timeSlot:timeLabel, maxBookings:max, notes, createdBy:session.name
-      }))});
+      }))}, 15000);
       if (res && res.ok) {
         const existing = SCHEDULE_SLOTS.find(s=>s.date===dateStr&&s.timeSlot===timeLabel);
         if (!existing) {
