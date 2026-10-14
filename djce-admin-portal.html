@@ -1609,6 +1609,8 @@ function switchView(name, ev) {
   updatePageTitle(name);
   window.scrollTo(0,0);
   if (name === 'settings') setTimeout(applySettingsAvatar, 50);
+  // Auto-close sidebar on mobile after selecting a nav item
+  closeSidebar();
 }
 
 function updatePageTitle(name) {
