@@ -2184,6 +2184,25 @@ function openBookingDetail(id) {
         </select>
       </div>
     </div>
+    <div class="sec-divider" style="margin-top:12px">📅 Reschedule</div>
+    <div style="background:var(--bg-elev2);border-radius:10px;padding:14px;border:1px solid var(--border);margin-bottom:12px">
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">Set a new date/time and notify the client via email</div>
+      <div class="form-grid">
+        <div class="field"><label>New Date</label>
+          <input type="date" id="reschedDate" value="${b.date||''}" style="width:100%">
+        </div>
+        <div class="field"><label>New Start Time</label>
+          <input type="time" id="reschedStartTime" value="09:00" style="width:100%">
+        </div>
+        <div class="field"><label>New End Time</label>
+          <input type="time" id="reschedEndTime" value="12:00" style="width:100%">
+        </div>
+        <div class="field"><label>Reason (optional)</label>
+          <input type="text" id="reschedReason" placeholder="e.g. Technician conflict, client request" style="width:100%">
+        </div>
+      </div>
+      <button class="btn btn-warning btn-sm" style="margin-top:8px" onclick="rescheduleBooking('${id}')">📅 Reschedule & Notify Client</button>
+    </div>
     <div class="sec-divider" style="margin-top:12px">💰 Payment Breakdown</div>
     <div style="background:var(--bg-elev2);border-radius:10px;padding:14px;border:1px solid var(--border)">
       <div class="form-grid" style="margin-bottom:10px">
@@ -2267,6 +2286,45 @@ async function sendBookingReminder(id) {
   } else {
     showToast(res.error||'Failed to send','error');
   }
+}
+
+async function rescheduleBooking(id) {
+  var b = BOOKINGS[id];
+  if (!b) return;
+  var newDate = document.getElementById('reschedDate')?.value;
+  var startT  = document.getElementById('reschedStartTime')?.value;
+  var endT    = document.getElementById('reschedEndTime')?.value;
+  var reason  = document.getElementById('reschedReason')?.value||'';
+  if (!newDate||!startT||!endT) { showToast('Select date, start and end time','error'); return; }
+  if (startT >= endT) { showToast('End time must be after start time','error'); return; }
+
+  var newTime = formatTime12(startT) + ' – ' + formatTime12(endT);
+  var oldDate = b.date||'';
+  var oldTime = b.time||b.timeSlot||'';
+
+  if (oldDate===newDate && oldTime===newTime) { showToast('Same schedule — nothing to change','error'); return; }
+
+  if (!confirm('Reschedule '+b.name+' from\\n'+formatDate(oldDate)+' '+oldTime+'\\nto\\n'+formatDate(newDate)+' '+newTime+(b.email?'\\n\\nClient will be notified via email.':''))) return;
+
+  showToast('Rescheduling…','info');
+  try {
+    var res = await callSheets({ action:'rescheduleBooking', data: encodeURIComponent(JSON.stringify({
+      id: id, newDate: newDate, newTime: newTime, oldDate: oldDate, oldTime: oldTime, reason: reason
+    }))});
+    if (res && res.ok) {
+      b.date = newDate;
+      b.time = newTime;
+      b.timeSlot = newTime;
+      b._dirty = true;
+      saveLocalData();
+      showToast('Rescheduled! '+(res.emailSent?'Email sent to '+b.email:'No email (no client email)'),'success');
+      logActivity('📅','Rescheduled '+id+': '+formatDate(oldDate)+' '+oldTime+' → '+formatDate(newDate)+' '+newTime+(reason?' ('+reason+')':''),'booking');
+      closeModal('bookingModal');
+      switchView('bookings');
+    } else {
+      showToast(res?.error||'Failed to reschedule','error');
+    }
+  } catch(e) { showToast('Error: '+e.message,'error'); }
 }
 
 function updateBooking(id) {

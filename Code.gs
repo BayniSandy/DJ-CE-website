@@ -139,6 +139,7 @@ function doGet(e) {
         case 'getInvestors':        result = getInvestors();              break;
         case 'saveInvestor':        result = saveInvestor(params);        break;
         case 'deleteInvestor':      result = deleteInvestor(params);      break;
+        case 'rescheduleBooking':    result = rescheduleBooking(params);   break;
         case 'sendReminder':        result = sendManualReminder(params);  break;
         case 'getSheetHeaders':     result = getSheetHeaders(params);     break;
         case 'fixBookingHeaders':   result = fixBookingHeaders();         break;
@@ -1595,6 +1596,137 @@ function sendAdminReminderDigest(reminded, overdue) {
 /**
  * Manual reminder — called from portal via JSONP: action=sendReminder&id=BK-xxx
  */
+/* ─── RESCHEDULE BOOKING ──────────────────────────────────── */
+function rescheduleBooking(p) {
+  var data = p.data ? JSON.parse(decodeURIComponent(p.data)) : p;
+  var sheet = getOrCreateSheet('Bookings');
+  var rows = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  var colMap = {};
+  headers.forEach(function(h, idx) { colMap[headerToKey(h)] = idx + 1; });
+
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === String(data.id)) {
+      var email   = cellToString(rows[i][colMap['email'] - 1]);
+      var name    = cellToString(rows[i][colMap['name'] - 1]);
+      var service = cellToString(rows[i][colMap['service'] - 1]);
+      var refNo   = cellToString(rows[i][colMap['refNo'] - 1]) || data.id;
+      var phone   = cellToString(rows[i][colMap['phone'] - 1]);
+
+      // Update date and time slot on sheet
+      if (colMap['date'])     sheet.getRange(i + 1, colMap['date']).setValue(data.newDate);
+      if (colMap['timeSlot']) sheet.getRange(i + 1, colMap['timeSlot']).setValue(data.newTime);
+
+      // Send reschedule email to client
+      var emailSent = false;
+      if (email) {
+        try {
+          sendRescheduleEmail(email, name, service, refNo, data.oldDate, data.oldTime, data.newDate, data.newTime, data.reason || '');
+          emailSent = true;
+        } catch(e) { Logger.log('Reschedule email failed: ' + e); }
+      }
+
+      // Send notification to admin
+      try {
+        MailApp.sendEmail({
+          to: NOTIF_EMAIL,
+          subject: '📅 Rescheduled: ' + (name || 'Client') + ' — ' + refNo,
+          htmlBody: '<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:20px">'
+            + '<h2 style="color:#f59e0b">📅 Booking Rescheduled</h2>'
+            + '<p><strong>' + refNo + '</strong> — ' + (name || 'Client') + '</p>'
+            + '<p>Service: ' + (service || '—') + '</p>'
+            + '<p>Old: ' + (data.oldDate || '—') + ' · ' + (data.oldTime || '—') + '</p>'
+            + '<p>New: <strong>' + (data.newDate || '—') + ' · ' + (data.newTime || '—') + '</strong></p>'
+            + (data.reason ? '<p>Reason: ' + data.reason + '</p>' : '')
+            + (emailSent ? '<p style="color:green">✅ Client notified via email</p>' : '<p style="color:#999">⚠️ No client email — not notified</p>')
+            + '</div>'
+        });
+      } catch(e) { Logger.log('Admin reschedule notif failed: ' + e); }
+
+      return { ok: true, id: data.id, emailSent: emailSent };
+    }
+  }
+  return { ok: false, error: 'Booking not found: ' + data.id };
+}
+
+function sendRescheduleEmail(email, name, service, refNo, oldDate, oldTime, newDate, newTime, reason) {
+  var firstName = name ? name.split(' ')[0] : 'there';
+
+  var newDateFormatted = newDate;
+  try {
+    var d = new Date(newDate + 'T00:00:00');
+    newDateFormatted = d.toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  } catch(e) {}
+
+  var oldDateFormatted = oldDate;
+  try {
+    var d2 = new Date(oldDate + 'T00:00:00');
+    oldDateFormatted = d2.toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  } catch(e) {}
+
+  var body = [
+    '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">',
+
+    // Header
+    '<div style="background:#0d1f3c;padding:28px 30px;text-align:center">',
+    '<div style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-0.5px">DJ-<span style="color:#f59e0b">CE</span></div>',
+    '<div style="font-size:11px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:2px;margin-top:4px">Aircon & Electrical Services</div>',
+    '<div style="display:inline-block;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.4);border-radius:20px;padding:6px 18px;margin-top:14px">',
+    '<span style="color:#f59e0b;font-size:13px;font-weight:700">📅 Schedule Update</span></div>',
+    '</div>',
+
+    // Ref banner
+    '<div style="background:#f59e0b;padding:14px 30px;text-align:center">',
+    '<div style="font-size:11px;color:#0d1f3c;text-transform:uppercase;font-weight:700;letter-spacing:1px">Booking Reference</div>',
+    '<div style="font-size:20px;font-weight:900;color:#0d1f3c;font-family:monospace;margin-top:4px">' + refNo + '</div>',
+    '</div>',
+
+    // Greeting
+    '<div style="padding:24px 30px 0">',
+    '<p style="font-size:15px;color:#1a1a2e;font-weight:600;margin:0">Hi ' + firstName + '! 👋</p>',
+    '<p style="font-size:13.5px;color:#475569;margin:8px 0 20px;line-height:1.6">',
+    'We\'re writing to let you know that your service appointment has been rescheduled. Please see the updated details below:',
+    '</p></div>',
+
+    // Old schedule (crossed out)
+    '<div style="margin:0 30px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;overflow:hidden">',
+    '<div style="background:#991b1b;padding:8px 16px"><span style="color:#fff;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">❌ Previous Schedule</span></div>',
+    '<table style="width:100%;border-collapse:collapse;font-size:13.5px">',
+    rowCard_('Date', '<span style="text-decoration:line-through;color:#991b1b">' + oldDateFormatted + '</span>'),
+    rowCard_('Time', '<span style="text-decoration:line-through;color:#991b1b">' + (oldTime || '—') + '</span>'),
+    '</table></div>',
+
+    // New schedule (highlighted)
+    '<div style="margin:0 30px 20px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;overflow:hidden">',
+    '<div style="background:#065f46;padding:8px 16px"><span style="color:#fff;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">✅ New Schedule</span></div>',
+    '<table style="width:100%;border-collapse:collapse;font-size:13.5px">',
+    rowCard_('Date', '<strong style="color:#065f46">' + newDateFormatted + '</strong>'),
+    rowCard_('Time', '<strong style="color:#065f46">' + (newTime || '—') + '</strong>'),
+    rowCard_('Service', service || '—'),
+    '</table></div>',
+
+    // Reason (if provided)
+    (reason ? '<div style="margin:0 30px 20px;padding:14px 16px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;font-size:13px;color:#92400e"><strong>📝 Reason:</strong> ' + reason + '</div>' : ''),
+
+    // Contact info
+    '<div style="margin:0 30px 20px;padding:16px;background:#f8faff;border:1px solid #e2e8f0;border-radius:10px">',
+    '<div style="font-size:12px;font-weight:700;color:#0d1f3c;margin-bottom:8px">📞 Questions?</div>',
+    '<p style="font-size:13px;color:#475569;margin:0;line-height:1.6">',
+    'If you need to make changes or have any concerns, please don\'t hesitate to contact us at <strong>' + BUSINESS_PHONE + '</strong>.',
+    '</p></div>',
+
+    // Footer
+    '<div style="background:#0d1f3c;color:rgba(255,255,255,.6);padding:12px 24px;border-radius:0 0 10px 10px;font-size:11px;text-align:center">',
+    BUSINESS_NAME + ' · ' + BUSINESS_ADDRESS + ' · ' + BUSINESS_PHONE + '</div></div>'
+  ].join('');
+
+  MailApp.sendEmail({
+    to: email,
+    subject: '📅 Schedule Update — ' + BUSINESS_NAME + ' [' + refNo + ']',
+    htmlBody: body
+  });
+}
+
 function sendManualReminder(p) {
   var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('Bookings');
   if (!sheet) return { ok: false, error: 'No Bookings sheet' };
