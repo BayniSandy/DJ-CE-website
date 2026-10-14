@@ -26,7 +26,7 @@ var HEADERS = {
   ],
   Accounts: [
     'Username','Password','Name','Role','Avatar',
-    'Last Pw Change','Force Change','Created At','Last Login'
+    'Last Pw Change','Force Change','Created At','Last Login','PIN'
   ],
   Clients: [
     'Client ID','Name','Phone','Email','Address',
@@ -550,13 +550,14 @@ function saveAccount(p) {
       if (data.lastPwChange) sheet.getRange(i+1,6).setValue(data.lastPwChange);
       if (data.forceChange !== undefined) sheet.getRange(i+1,7).setValue(data.forceChange);
       if (data.lastLogin)    sheet.getRange(i+1,9).setValue(data.lastLogin);
+      if (data.pin !== undefined) sheet.getRange(i+1,10).setValue(data.pin);
       return { ok: true, action: 'updated', username: data.username };
     }
   }
   sheet.appendRow([
     data.username, data.password||'', data.name||'', data.role||'',
     data.avatar||'?', data.lastPwChange||'', data.forceChange||'false',
-    now(), ''
+    now(), '', data.pin||''
   ]);
   return { ok: true, action: 'created', username: data.username };
 }

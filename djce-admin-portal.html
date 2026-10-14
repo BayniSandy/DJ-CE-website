@@ -1029,11 +1029,39 @@ const DEFAULT_ACCOUNTS = {
 let USERS = {};
 
 function loadAccounts() {
+  // Load from localStorage first (instant, for login screen)
   try {
     const stored = localStorage.getItem('djce_accounts');
     USERS = stored ? JSON.parse(stored) : JSON.parse(JSON.stringify(DEFAULT_ACCOUNTS));
     if (!stored) localStorage.setItem('djce_accounts', JSON.stringify(USERS));
   } catch(e) { USERS = JSON.parse(JSON.stringify(DEFAULT_ACCOUNTS)); }
+}
+
+function loadAccountsFromSheets() {
+  // Fetch accounts from Sheets (source of truth) — called after login screen shows
+  return callSheets({ action: 'getAccounts' }).then(function(res) {
+    if (res && res.ok && res.accounts && res.accounts.length) {
+      // Convert array to keyed object by username
+      res.accounts.forEach(function(acc) {
+        var u = (acc.username || '').toLowerCase();
+        if (!u) return;
+        if (!USERS[u]) {
+          USERS[u] = acc;
+        } else {
+          // Sync from Sheets — Sheets is source of truth for credentials
+          if (acc.password) USERS[u].password = acc.password;
+          if (acc.name) USERS[u].name = acc.name;
+          if (acc.role) USERS[u].role = acc.role;
+          if (acc.avatar) USERS[u].avatar = acc.avatar;
+          if (acc.lastPwChange) USERS[u].lastPwChange = acc.lastPwChange;
+          if (acc.forceChange !== undefined) USERS[u].forceChange = (acc.forceChange === 'true' || acc.forceChange === true);
+          if (acc.pin) USERS[u].pin = acc.pin;
+        }
+      });
+      saveAccounts();
+      console.log('✅ Accounts synced from Sheets (' + res.accounts.length + ')');
+    }
+  }).catch(function() { console.log('⚠️ Could not fetch accounts from Sheets, using local data'); });
 }
 
 function saveAccounts() {
@@ -1115,6 +1143,7 @@ function resetForgotPassword(username) {
   USERS[username].lastPwChange = new Date().toISOString();
   USERS[username].forceChange = false;
   saveAccounts();
+  syncAccountToSheets({username:username, password:pw, lastPwChange:USERS[username].lastPwChange, forceChange:false});
   closeForgotPassword();
   alert('✅ Password reset successfully!\n\nYou can now login with your new password.');
 }
@@ -1246,6 +1275,8 @@ const LOGIN_LOCK_MINS = 15;
 function init() {
   applyTheme(localStorage.getItem('djce_theme') || 'dark');
   loadAccounts();
+  // Fetch latest accounts from Sheets in background (source of truth)
+  loadAccountsFromSheets();
   // Load remembered credentials after a short delay so DOM is ready
   setTimeout(loadRemembered, 50);
   // Inject logo into static HTML img tags
@@ -1389,6 +1420,7 @@ function handleLogin() {
   setTimeout(() => {
     session = { username: u, name: user.name, role: user.role, avatar: user.avatar };
     localStorage.setItem('djce_session', JSON.stringify(session));
+    syncAccountToSheets({username:u, lastLogin:new Date().toISOString()});
     logActivity('🔐', `${session.name} signed in`, 'auth');
     btn.textContent = 'Sign In →'; btn.disabled = false;
     // Check forced change or 90-day expiry
@@ -8610,24 +8642,9 @@ async function fetchFromSheets() {
       });
     }
 
-    // 2. Accounts (sync from Sheets — source of truth for password/forceChange)
+    // 2. Accounts (sync from Sheets — source of truth for password/forceChange/PIN)
     if (session) {
-      const accData = await callSheets({ action: 'getAccounts' });
-      if (accData && accData.ok && accData.accounts) {
-        Object.entries(accData.accounts).forEach(function([k, v]) {
-          if (!USERS[k]) {
-            USERS[k] = v;
-          } else {
-            // Update password, forceChange, lastPwChange from Sheets
-            if (v.password) USERS[k].password = v.password;
-            if (v.forceChange !== undefined) USERS[k].forceChange = (v.forceChange === 'true' || v.forceChange === true);
-            if (v.lastPwChange) USERS[k].lastPwChange = v.lastPwChange;
-            if (v.role) USERS[k].role = v.role;
-            if (v.name) USERS[k].name = v.name;
-          }
-        });
-        saveAccounts();
-      }
+      await loadAccountsFromSheets();
     }
 
     // 3. Clients — sync both ways: add new from sheets, remove deleted from sheets
@@ -9656,9 +9673,14 @@ function saveEditAccount(oldUsername){
     role: u.role==='owner' ? 'owner' : role
   });
   if(pw){ updated.password=pw; updated.lastPwChange=new Date().toISOString(); updated.forceChange=false; }
-  if(newU!==oldUsername) delete USERS[oldUsername];
+  if(newU!==oldUsername) {
+    delete USERS[oldUsername];
+    // Delete old username from Sheets if renamed
+    callSheets({ action: 'deleteAccount', username: oldUsername }).catch(function(){});
+  }
   USERS[newU] = updated;
   saveAccounts();
+  syncAccountToSheets(updated);
   logActivity('Edit account: @'+oldUsername+(newU!==oldUsername?' to @'+newU:''), 'settings');
   closeModal('editModal');
   showToast('Account updated!','success');
@@ -9705,6 +9727,7 @@ function forceReset(username){
     USERS[username].forceChange = true;
     USERS[username].lastPwChange = null;
     saveAccounts();
+    syncAccountToSheets({username:username, forceChange:true, lastPwChange:''});
     logActivity('Forced password reset for @'+username,'settings');
     showToast('@'+username+' must change password on next login','success');
     switchView('settings');
@@ -9718,6 +9741,7 @@ function removeAccount(username){
   confirm2('Remove Account','Permanently remove @'+username+' ('+u.name+')? They will lose access immediately.','🗑️',function(){
     delete USERS[username];
     saveAccounts();
+    callSheets({ action: 'deleteAccount', username: username }).catch(function(){});
     logActivity('Removed account @'+username,'settings');
     showToast('Account @'+username+' removed','success');
     switchView('settings');
@@ -9731,6 +9755,7 @@ function saveName(){
   USERS[session.username].name=n;session.name=n;
   localStorage.setItem('djce_session',JSON.stringify(session));
   saveAccounts();
+  syncAccountToSheets({username:session.username, name:n});
   document.getElementById('userDisplayName').textContent=n;
   logActivity('✏️',session.name+' updated display name','settings');
   showToast('Display name updated!','success');
@@ -9938,6 +9963,7 @@ function forceReset(username){
   confirm2('Force Password Reset','Require @'+username+' ('+USERS[username]?.name+') to change password on next login.','🔄',()=>{
     USERS[username].forceChange=true;USERS[username].lastPwChange=null;
     saveAccounts();
+    syncAccountToSheets({username:username, forceChange:true, lastPwChange:''});
     logActivity('🔄','Owner forced reset for @'+username,'settings');
     showToast('Password reset forced for @'+username,'success');
     switchView('settings');
@@ -9949,6 +9975,7 @@ function removeAccount(username){
   confirm2('Remove Account','Remove @'+username+' ('+USERS[username]?.name+')? This cannot be undone.','🗑️',()=>{
     const name=USERS[username]?.name;
     delete USERS[username];saveAccounts();
+    callSheets({ action: 'deleteAccount', username: username }).catch(function(){});
     logActivity('🗑️','Removed account @'+username+' ('+name+')','settings');
     showToast('Account removed','success');
     switchView('settings');
@@ -9986,6 +10013,7 @@ function saveNewAccount(){
   const initials=n.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
   USERS[u]={username:u,password:p,name:n,role:r,avatar:initials,lastPwChange:null,forceChange:true};
   saveAccounts();
+  syncAccountToSheets(USERS[u]);
   logActivity('➕','Owner created account @'+u+' ('+n+')','settings');
   closeModal('editModal');
   showToast('Account @'+u+' created! They must change password on first login.','success');
@@ -10152,12 +10180,38 @@ var MAX_PIN_ATTEMPTS = 5;
 function getPinKey() { return 'djce_pin_'+(session?session.username:''); }
 
 function getStoredPin() {
-  try { return localStorage.getItem(getPinKey())||''; } catch(e){ return ''; }
+  // Read from USERS object (synced with Sheets), fallback to old localStorage
+  if (session && USERS[session.username] && USERS[session.username].pin) {
+    return USERS[session.username].pin;
+  }
+  try {
+    var old = localStorage.getItem(getPinKey()) || '';
+    // Migrate old localStorage PIN to USERS object
+    if (old && session && USERS[session.username]) {
+      USERS[session.username].pin = old;
+      saveAccounts();
+      syncAccountToSheets({ username: session.username, pin: old });
+      localStorage.removeItem(getPinKey());
+    }
+    return old;
+  } catch(e){ return ''; }
 }
 function savePin(pin) {
+  // Save to USERS object + localStorage + sync to Sheets
+  if (session && USERS[session.username]) {
+    USERS[session.username].pin = pin;
+    saveAccounts();
+    syncAccountToSheets({ username: session.username, pin: pin });
+  }
   try { localStorage.setItem(getPinKey(), pin); } catch(e){}
 }
 function clearPin() {
+  // Clear from USERS object + localStorage + sync to Sheets
+  if (session && USERS[session.username]) {
+    USERS[session.username].pin = '';
+    saveAccounts();
+    syncAccountToSheets({ username: session.username, pin: '' });
+  }
   try { localStorage.removeItem(getPinKey()); } catch(e){}
 }
 
@@ -10275,10 +10329,40 @@ function checkPin() {
 }
 
 function pinForgot() {
-  confirm2('Reset PIN','You will be signed out to reset your PIN. Continue?','🔑', function(){
-    clearPin();
-    handleLogout();
-  });
+  // Show password verification dialog instead of signing out
+  var el = document.getElementById('pinLockScreen');
+  var lockBox = el ? el.querySelector('div[style*="background:var(--bg-elev)"]') : null;
+  if (!lockBox) { handleLogout(); return; }
+  lockBox.innerHTML =
+    '<img src="'+DJCE_LOGO+'" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:3px solid var(--accent);margin-bottom:12px">'
+    +'<div style="font-size:18px;font-weight:800;margin-bottom:4px">🔑 Forgot PIN</div>'
+    +'<div style="font-size:13px;color:var(--text-sec);margin-bottom:18px">Enter your password to reset your PIN</div>'
+    +'<input type="password" id="pinForgotPw" placeholder="Enter your password" style="width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-family:inherit;font-size:14px;outline:none;margin-bottom:10px;box-sizing:border-box">'
+    +'<div id="pinForgotErr" style="color:var(--error);font-size:12px;min-height:18px;margin-bottom:8px"></div>'
+    +'<button onclick="verifyPinForgotPw()" style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;margin-bottom:8px">Verify & Reset PIN</button>'
+    +'<button onclick="cancelPinForgot()" style="width:100%;padding:10px;background:transparent;color:var(--text-sec);border:1px solid var(--border);border-radius:10px;font-size:13px;cursor:pointer">← Back to PIN</button>';
+  setTimeout(function(){ document.getElementById('pinForgotPw')?.focus(); }, 100);
+}
+
+function verifyPinForgotPw() {
+  var pw = (document.getElementById('pinForgotPw')?.value || '').trim();
+  if (!pw) { document.getElementById('pinForgotErr').textContent = 'Enter your password.'; return; }
+  var me = USERS[session.username];
+  if (!me || me.password !== pw) {
+    document.getElementById('pinForgotErr').textContent = 'Wrong password. Try again.';
+    return;
+  }
+  // Password verified — clear old PIN and show setup
+  clearPin();
+  unlockPortal();
+  showToast('Password verified! Set your new PIN.', 'success');
+  logActivity('🔑', session.name + ' reset PIN via password', 'security');
+  setTimeout(showPinSetup, 300);
+}
+
+function cancelPinForgot() {
+  // Re-render the lock screen
+  lockPortal();
 }
 
 /* ── PIN Setup ── */
