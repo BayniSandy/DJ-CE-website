@@ -102,7 +102,7 @@ function doGet(e) {
     var cb     = params.cb     || '';
 
     if (!action) {
-      result = { ok: true, name: 'DJ-CE Backend v4.0', time: now() };
+      result = { ok: true, name: 'DJ-CE Backend v4.1', time: now() };
     } else {
       switch (action) {
         case 'submitBooking':       result = submitBooking(params);       break;

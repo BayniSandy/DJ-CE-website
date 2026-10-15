@@ -8930,14 +8930,27 @@ function syncActivityToSheets(user, message, type) {
   }).catch(function() {});
 }
 
-function syncAccountToSheets(acc) {
+function syncAccountToSheets(acc, _retry) {
   if (!acc) return;
   callSheets({ action: 'saveAccount', data: encodeURIComponent(JSON.stringify(acc)) })
     .then(function(res) {
-      if (res && res.ok) console.log('Account synced: @' + acc.username);
-      else console.log('⚠️ Account sync failed for @' + acc.username + ': ' + (res&&res.error||'unknown'));
+      if (res && res.ok) {
+        console.log('Account synced: @' + acc.username);
+      } else if (!_retry) {
+        console.log('⚠️ Account sync retry for @' + acc.username);
+        setTimeout(function(){ syncAccountToSheets(acc, true); }, 2000);
+      } else {
+        console.log('❌ Account sync failed for @' + acc.username + ': ' + (res&&res.error||'unknown'));
+        showToast('Sync failed for @'+acc.username+'. Changes saved locally only.','error');
+      }
     })
-    .catch(function(e) { console.log('⚠️ Account sync error: ' + e); });
+    .catch(function(e) {
+      if (!_retry) {
+        setTimeout(function(){ syncAccountToSheets(acc, true); }, 2000);
+      } else {
+        console.log('❌ Account sync error: ' + e);
+      }
+    });
 }
 function addNotif(msg, type, targetId) {
   const id = 'n' + Date.now();
