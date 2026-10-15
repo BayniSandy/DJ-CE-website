@@ -1037,31 +1037,46 @@ function loadAccounts() {
   } catch(e) { USERS = JSON.parse(JSON.stringify(DEFAULT_ACCOUNTS)); }
 }
 
+var _accountSyncDone = false;
+var _accountSyncPromise = null;
+
+function _applySheetAccounts(res) {
+  if (res && res.ok && res.accounts && res.accounts.length) {
+    res.accounts.forEach(function(acc) {
+      var u = (acc.username || '').toLowerCase();
+      if (!u) return;
+      if (!USERS[u]) {
+        USERS[u] = acc;
+      } else {
+        if (acc.password) USERS[u].password = acc.password;
+        if (acc.name) USERS[u].name = acc.name;
+        if (acc.role) USERS[u].role = acc.role;
+        if (acc.avatar) USERS[u].avatar = acc.avatar;
+        if (acc.lastPwChange) USERS[u].lastPwChange = acc.lastPwChange;
+        if (acc.forceChange !== undefined) USERS[u].forceChange = (acc.forceChange === 'true' || acc.forceChange === true);
+        if (acc.pin) USERS[u].pin = acc.pin;
+      }
+    });
+    saveAccounts();
+    _accountSyncDone = true;
+    console.log('✅ Accounts synced from Sheets (' + res.accounts.length + ')');
+    return true;
+  }
+  return false;
+}
+
 function loadAccountsFromSheets() {
-  // Fetch accounts from Sheets (source of truth) — called after login screen shows
-  return callSheets({ action: 'getAccounts' }).then(function(res) {
-    if (res && res.ok && res.accounts && res.accounts.length) {
-      // Convert array to keyed object by username
-      res.accounts.forEach(function(acc) {
-        var u = (acc.username || '').toLowerCase();
-        if (!u) return;
-        if (!USERS[u]) {
-          USERS[u] = acc;
-        } else {
-          // Sync from Sheets — Sheets is source of truth for credentials
-          if (acc.password) USERS[u].password = acc.password;
-          if (acc.name) USERS[u].name = acc.name;
-          if (acc.role) USERS[u].role = acc.role;
-          if (acc.avatar) USERS[u].avatar = acc.avatar;
-          if (acc.lastPwChange) USERS[u].lastPwChange = acc.lastPwChange;
-          if (acc.forceChange !== undefined) USERS[u].forceChange = (acc.forceChange === 'true' || acc.forceChange === true);
-          if (acc.pin) USERS[u].pin = acc.pin;
-        }
+  _accountSyncPromise = callSheets({ action: 'getAccounts' }).then(function(res) {
+    if (!_applySheetAccounts(res)) {
+      // First attempt failed or empty — retry once
+      return callSheets({ action: 'getAccounts' }).then(function(res2) {
+        _applySheetAccounts(res2);
       });
-      saveAccounts();
-      console.log('✅ Accounts synced from Sheets (' + res.accounts.length + ')');
     }
-  }).catch(function() { console.log('⚠️ Could not fetch accounts from Sheets, using local data'); });
+  }).catch(function() {
+    console.log('⚠️ Could not fetch accounts from Sheets, using local data');
+  });
+  return _accountSyncPromise;
 }
 
 function saveAccounts() {
@@ -1377,7 +1392,7 @@ function validateStrongPassword(pw) {
   return '';
 }
 
-function handleLogin() {
+async function handleLogin() {
   const u = document.getElementById('username').value.trim().toLowerCase();
   const p = document.getElementById('password').value;
   const btn = document.getElementById('loginBtn');
@@ -1390,6 +1405,13 @@ function handleLogin() {
     var minsLeft = Math.ceil((_loginLockUntil - Date.now()) / 60000);
     showErr('Too many failed attempts. Try again in ' + minsLeft + ' min.');
     return;
+  }
+
+  // Wait for Sheets sync to finish before checking credentials
+  if (_accountSyncPromise && !_accountSyncDone) {
+    btn.textContent = 'Syncing...'; btn.disabled = true;
+    try { await _accountSyncPromise; } catch(e) {}
+    btn.textContent = 'Sign In →'; btn.disabled = false;
   }
 
   const user = USERS[u];
@@ -8502,7 +8524,7 @@ function loadLocalData() {
 /* ─── GOOGLE SHEETS SYNC ENGINE ─────────────────────────── */
 
 function callSheets(params, timeout) {
-  timeout = timeout || 8000;
+  timeout = timeout || 15000;
   return new Promise(function(resolve) {
     var cb = 'djceCb' + Date.now() + Math.floor(Math.random()*9999);
     var s = document.createElement('script');
@@ -8911,8 +8933,11 @@ function syncActivityToSheets(user, message, type) {
 function syncAccountToSheets(acc) {
   if (!acc) return;
   callSheets({ action: 'saveAccount', data: encodeURIComponent(JSON.stringify(acc)) })
-    .then(function(res) { if (res && res.ok) console.log('Account synced: @' + acc.username); })
-    .catch(function() {});
+    .then(function(res) {
+      if (res && res.ok) console.log('Account synced: @' + acc.username);
+      else console.log('⚠️ Account sync failed for @' + acc.username + ': ' + (res&&res.error||'unknown'));
+    })
+    .catch(function(e) { console.log('⚠️ Account sync error: ' + e); });
 }
 function addNotif(msg, type, targetId) {
   const id = 'n' + Date.now();
