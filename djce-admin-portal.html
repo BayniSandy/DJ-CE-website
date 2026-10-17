@@ -3072,6 +3072,7 @@ function toggleInvestorCovered(id) {
    CLIENTS
 =========================== */
 function renderClients() {
+  try{
   const clients = mergeClients();
   const now = new Date();
   return `<div class="panel">
@@ -3097,6 +3098,7 @@ function renderClients() {
       </table></div>
     </div>
   </div>`;
+  }catch(e){console.error('renderClients error:',e);return '<div class="empty"><div class="empty-ic">⚠️</div>Error loading clients: '+e.message+'<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchView(\'clients\')">Retry</button></div>';}
 }
 
 function renderClientRows(clients) {
@@ -9102,11 +9104,14 @@ let CLIENTS={};
 /* ===== CLEANING CALC ===== */
 function calcNextCleaning(lastDate,usageLabel){
   if(!lastDate)return null;
-  const opt=USAGE_OPTS.find(u=>u.label===usageLabel);
-  const months=opt?opt.months:3;
-  const d=new Date(lastDate+'T00:00:00');
-  d.setMonth(d.getMonth()+Math.ceil(months));
-  return d.toISOString().split('T')[0];
+  try{
+    const opt=USAGE_OPTS.find(u=>u.label===usageLabel);
+    const months=opt?opt.months:3;
+    const d=new Date(lastDate+'T00:00:00');
+    if(isNaN(d.getTime()))return null;
+    d.setMonth(d.getMonth()+Math.ceil(months));
+    return d.toISOString().split('T')[0];
+  }catch(e){return null;}
 }
 
 /* ===== MERGE CLIENTS from bookings + manual ===== */
@@ -9114,7 +9119,9 @@ function mergeClients(){
   const map={};
   // from bookings
   Object.values(BOOKINGS).forEach(b=>{
+    try{
     const key=b.phone||b.name;
+    if(!key)return;
     if(!map[key]){
       map[key]={
         id:'BC-'+(b.phone||'').replace(/\D/g,'')||b.name,
@@ -9130,6 +9137,7 @@ function mergeClients(){
       if(b.usage)map[key].usage=b.usage;
       map[key].nextCleaningDate=calcNextCleaning(b.date,b.usage||map[key].usage||'');
     }
+    }catch(e){console.warn('Skip bad booking:',b.id,e);}
   });
   // manual clients override
   Object.values(CLIENTS).forEach(c=>{
@@ -9182,6 +9190,7 @@ function getMonthOptions(selectedYM){
 
 /* ===== FOLLOW-UP CENTER VIEW ===== */
 function renderFollowup(){
+  try{
   const due=getDueClients();
   const fu=getFollowUpDue();
   const overdue=due.filter(c=>new Date(c.nextCleaningDate)<new Date());
@@ -9224,6 +9233,7 @@ function renderFollowup(){
       }).join('')
     : '<div class="empty"><div class="empty-ic">📱</div>No after-sales follow-ups due</div>')+
   '</div>';
+  }catch(e){console.error('renderFollowup error:',e);return '<div class="empty"><div class="empty-ic">⚠️</div>Error loading follow-ups: '+e.message+'<br><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="switchView(\'followup\')">Retry</button></div>';}
 }
 
 function showFUTab(el,show){
