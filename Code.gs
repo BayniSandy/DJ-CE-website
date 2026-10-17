@@ -1007,7 +1007,7 @@ function sendClientConfirmationEmail(id, data, svcSummary, fullAddress) {
 function sendBookingConfirmedEmail(refNo, name, email, service, date, timeSlot, address, technician) {
   if (!email) return;
 
-  var slotInfo = TIME_SLOTS[timeSlot] || { label: timeSlot, time: timeSlot };
+  var slotInfo = TIME_SLOTS[timeSlot];
   var scheduleTime = slotInfo ? (slotInfo.label + ' · ' + slotInfo.time) : (timeSlot || '—');
   var firstName = name ? name.split(' ')[0] : 'there';
 
