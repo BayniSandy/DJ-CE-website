@@ -305,6 +305,24 @@ function updateBooking(p) {
         }
       }
 
+      // If status changed to Confirmed → send confirmation email to client
+      if (oldStatus !== 'Confirmed' && newStatus === 'Confirmed') {
+        try {
+          var bEmail = data.email || cellToString(rows[i][headers.indexOf('Email')]);
+          var bName  = data.name  || cellToString(rows[i][headers.indexOf('Name')]);
+          var bPhone = data.phone || cellToString(rows[i][headers.indexOf('Phone')]);
+          var bSvc   = data.service || cellToString(rows[i][headers.indexOf('Service')]);
+          var bDate  = data.date  || cellToString(rows[i][headers.indexOf('Date')]);
+          var bSlot  = data.time  || cellToString(rows[i][headers.indexOf('Time Slot')]);
+          var bAddr  = data.address || cellToString(rows[i][headers.indexOf('Full Address')]);
+          var bTech  = data.technician || cellToString(rows[i][headers.indexOf('Technician')]);
+          var bRef   = data.refNo || cellToString(rows[i][headers.indexOf('Ref No')]) || data.id;
+          if (bEmail) {
+            sendBookingConfirmedEmail(bRef, bName, bEmail, bSvc, bDate, bSlot, bAddr, bTech);
+          }
+        } catch(emailErr) { /* don't fail the update if email fails */ }
+      }
+
       // Color code status
       var statusColors = {
         'Pending':     { bg: '#fef3c7', fg: '#92400e' },
@@ -977,6 +995,77 @@ function sendClientConfirmationEmail(id, data, svcSummary, fullAddress) {
 
   MailApp.sendEmail({
     to: data.email,
+    subject: '✅ Booking Confirmed — ' + refNo + ' | ' + BUSINESS_NAME,
+    htmlBody: body,
+    replyTo: NOTIF_EMAIL
+  });
+}
+
+/**
+ * Confirmation email sent to client when booking status is changed to "Confirmed"
+ */
+function sendBookingConfirmedEmail(refNo, name, email, service, date, timeSlot, address, technician) {
+  if (!email) return;
+
+  var slotInfo = TIME_SLOTS[timeSlot] || { label: timeSlot, time: timeSlot };
+  var scheduleTime = slotInfo ? (slotInfo.label + ' · ' + slotInfo.time) : (timeSlot || '—');
+  var firstName = name ? name.split(' ')[0] : 'there';
+
+  var row_ = function(label, val) {
+    return '<tr><td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600;color:#475569;width:35%;background:#f8fafc;font-size:12px">'
+      + label + '</td><td style="padding:8px 12px;border:1px solid #e2e8f0;font-size:12.5px">' + (val||'—') + '</td></tr>';
+  };
+
+  var body = [
+    '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">',
+
+    '<div style="background:#0d1f3c;padding:28px 30px;text-align:center">',
+    '<div style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-0.5px">DJ-<span style="color:#f59e0b">CE</span></div>',
+    '<div style="font-size:11px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:2px;margin-top:4px">Aircon & Electrical Services</div>',
+    '<div style="display:inline-block;background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.4);border-radius:20px;padding:6px 18px;margin-top:14px">',
+    '<span style="color:#10b981;font-size:13px;font-weight:700">✅ Booking Confirmed!</span></div>',
+    '</div>',
+
+    '<div style="background:#10b981;padding:14px 30px;text-align:center">',
+    '<div style="font-size:11px;color:#fff;text-transform:uppercase;font-weight:700;letter-spacing:1px">Booking Reference</div>',
+    '<div style="font-size:20px;font-weight:900;color:#fff;font-family:monospace;margin-top:4px">' + refNo + '</div>',
+    '</div>',
+
+    '<div style="padding:24px 30px 0">',
+    '<p style="font-size:15px;color:#1a1a2e;font-weight:600;margin:0">Hi ' + firstName + '! 👋</p>',
+    '<p style="font-size:13.5px;color:#475569;margin:8px 0 20px;line-height:1.6">',
+    'Great news! Your booking has been <strong>confirmed</strong>. Our technician will be at your location on the scheduled date. Here are your booking details:</p></div>',
+
+    '<div style="padding:0 30px 20px">',
+    '<table style="width:100%;border-collapse:collapse">',
+    row_('Reference', '<strong>' + refNo + '</strong>'),
+    row_('Service', '<strong>' + (service||'—') + '</strong>'),
+    row_('Date', date || '—'),
+    row_('Time', scheduleTime),
+    row_('Address', address || '—'),
+    technician ? row_('Technician', technician) : '',
+    '</table></div>',
+
+    '<div style="padding:0 30px 24px">',
+    '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 16px">',
+    '<div style="font-size:13px;font-weight:700;color:#166534;margin-bottom:4px">📋 Reminders:</div>',
+    '<ul style="font-size:12px;color:#166534;margin:0;padding-left:18px;line-height:1.8">',
+    '<li>Please make sure someone is at home on the scheduled date.</li>',
+    '<li>Our technician will call before arrival.</li>',
+    '<li>For changes or cancellation, contact us at <strong>' + BUSINESS_PHONE + '</strong>.</li>',
+    '</ul></div></div>',
+
+    '<div style="background:#0d1f3c;padding:16px 30px;text-align:center">',
+    '<div style="color:rgba(255,255,255,.8);font-size:12px;line-height:1.8">',
+    BUSINESS_NAME + '<br>' + BUSINESS_ADDRESS + '<br>📞 ' + BUSINESS_PHONE + '<br>',
+    '<span style="color:rgba(255,255,255,.5);font-size:11px">Reliable · Safe · Long-Lasting</span>',
+    '</div></div>',
+
+    '</div>'
+  ].join('');
+
+  MailApp.sendEmail({
+    to: email,
     subject: '✅ Booking Confirmed — ' + refNo + ' | ' + BUSINESS_NAME,
     htmlBody: body,
     replyTo: NOTIF_EMAIL

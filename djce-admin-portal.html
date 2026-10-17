@@ -3568,9 +3568,9 @@ function renderWarrantyTracker() {
   var coveredIds = WARRANTY_LOG.map(function(w){return w.bookingId;});
   Object.values(BOOKINGS).forEach(function(b){
     if (b.status!=='Done'||!b.completedAt||coveredIds.indexOf(b.id)!==-1) return;
-    // Default warranty: 30 days for cleaning, 90 days for repair/install
+    // Default warranty: 7 days for cleaning, 90 days for repair/install
     var svc = (b.service||'').toLowerCase();
-    var days = (svc.indexOf('repair')!==-1||svc.indexOf('install')!==-1) ? 90 : 30;
+    var days = (svc.indexOf('repair')!==-1||svc.indexOf('install')!==-1) ? 90 : 7;
     var start = new Date(b.completedAt);
     var end = new Date(start.getTime()+days*86400000);
     var entry = {id:'AW-'+b.id,bookingId:b.id,clientName:b.name,service:b.service,warrantyDays:days,startDate:b.completedAt.split('T')[0],endDate:end.toISOString().split('T')[0],notes:'Auto-generated',auto:true};
@@ -3597,7 +3597,7 @@ function renderWarrantyTracker() {
     +'<div class="panel-title">🛡️ Active Warranty Tracker ('+activeW.length+')</div>'
     +'<button class="btn btn-gold btn-sm" onclick="openAddWarranty()">➕ Add Warranty</button></div>'
     +'<div class="panel-body">'
-    +'<div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">Auto-generated from completed bookings (Cleaning: 30 days, Repair/Install: 90 days). Add manual entries for custom warranty periods.</div>'
+    +'<div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">Auto-generated from completed bookings (Cleaning: 7 days, Repair/Install: 90 days). Add manual entries for custom warranty periods.</div>'
     +(activeW.length ?
       '<div class="tbl-wrap"><table><thead><tr><th>Client</th><th>Service</th><th style="text-align:center">Period</th><th>Start</th><th>Expires</th><th style="text-align:center">Left</th><th style="text-align:center">Action</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     : '<div class="empty" style="padding:16px"><div class="empty-ic">✅</div>No active warranties</div>')
@@ -4188,7 +4188,7 @@ function generateServiceAgreement(id) {
 
   // Determine warranty period
   var svc = (b.service||'').toLowerCase();
-  var warrantyDays = 30;
+  var warrantyDays = 7;
   if (svc.includes('repair')||svc.includes('install')) warrantyDays = 90;
   var warrantyText = warrantyDays + ' days';
 
