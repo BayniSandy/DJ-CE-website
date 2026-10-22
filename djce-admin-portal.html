@@ -8525,7 +8525,7 @@ function loadLocalData() {
 =========================== */
 /* ─── GOOGLE SHEETS SYNC ENGINE ─────────────────────────── */
 
-function callSheets(params, timeout) {
+function callSheets(params, timeout, _noCookies) {
   timeout = timeout || 15000;
   return new Promise(function(resolve) {
     var cb = 'djceCb' + Date.now() + Math.floor(Math.random()*9999);
@@ -8534,6 +8534,8 @@ function callSheets(params, timeout) {
       return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
     }).join('&');
     s.src = APPS_SCRIPT_URL + '?' + query + '&cb=' + cb;
+    // Retry mode: send request WITHOUT Google account cookies (fixes phones with multiple/signed-in Google accounts)
+    if (_noCookies) s.crossOrigin = 'anonymous';
     var done = false;
     window[cb] = function(data) {
       if (done) return; done = true;
@@ -8542,7 +8544,12 @@ function callSheets(params, timeout) {
     s.onerror = function() {
       if (done) return; done = true;
       delete window[cb]; s.remove();
-      resolve({ ok: false, error: 'Network error' });
+      if (!_noCookies) {
+        // First try failed before reaching the script — retry once without cookies
+        callSheets(params, timeout, true).then(resolve);
+      } else {
+        resolve({ ok: false, error: 'Network error' });
+      }
     };
     document.head.appendChild(s);
     setTimeout(function() {
