@@ -14,6 +14,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.7.0/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.5/tesseract.min.js"></script>
 <style>
 /* ============ THEME ============ */
 :root {
@@ -523,6 +524,7 @@ tr:hover td { background:var(--bg-elev2); }
 .toast.info { border-left:4px solid var(--accent); }
 .toast.warning { border-left:4px solid var(--warning); }
 @keyframes slideInRight { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.1)} }
 
 /* ACTIVITY LOG */
 .log-item { display:flex; gap:12px; padding:10px 0; border-bottom:1px solid var(--border); }
@@ -3081,6 +3083,7 @@ function renderClients() {
       <div style="display:flex;gap:7px;flex-wrap:wrap">
         <button class="btn btn-gold btn-sm" onclick="openNewClient()">➕ Add Client</button>
         <button class="btn btn-primary btn-sm" onclick="openImportClients()">📥 Import Clients</button>
+        <button class="btn btn-outline btn-sm" onclick="scanClientPhoto()">📷 Scan Client</button>
       </div>
     </div>
     <div style="padding:13px">
@@ -9532,6 +9535,198 @@ function importAllClients() {
     showToast('✅ ' + count + ' clients imported!', 'success');
     addNotif('Imported ' + count + ' clients from batch', 'success');
   }
+}
+
+/* ===========================
+   SCAN CLIENT (Camera + OCR)
+=========================== */
+var _scanFileInput = null;
+
+function scanClientPhoto() {
+  if (!_scanFileInput) {
+    _scanFileInput = document.createElement('input');
+    _scanFileInput.type = 'file';
+    _scanFileInput.accept = 'image/*';
+    _scanFileInput.capture = 'environment';
+    _scanFileInput.style.display = 'none';
+    _scanFileInput.addEventListener('change', handleScanFile);
+    document.body.appendChild(_scanFileInput);
+  }
+  _scanFileInput.value = '';
+  _scanFileInput.click();
+}
+
+function handleScanFile(e) {
+  var file = e.target.files && e.target.files[0];
+  if (!file) return;
+  // Show processing modal
+  document.getElementById('emTitle').textContent = '📷 Scanning Client Info...';
+  document.getElementById('emSub').textContent = 'Reading text from image — sandali lang';
+  document.getElementById('emBody').innerHTML =
+    '<div style="text-align:center;padding:40px 20px">' +
+    '<div style="font-size:48px;margin-bottom:16px;animation:pulse 1.5s infinite">🔍</div>' +
+    '<div id="scanStatus" style="font-size:14px;color:var(--text-dim)">Loading OCR engine...</div>' +
+    '<div style="margin-top:16px;background:var(--border);border-radius:8px;height:8px;overflow:hidden">' +
+    '<div id="scanBar" style="height:100%;width:0%;background:var(--accent);border-radius:8px;transition:width 0.3s"></div>' +
+    '</div>' +
+    '<div id="scanPreview" style="margin-top:16px;max-height:200px;overflow:hidden;border-radius:8px"></div>' +
+    '</div>';
+  document.getElementById('emFoot').innerHTML =
+    '<button class="btn btn-outline btn-sm" onclick="closeModal(\'editModal\')">Cancel</button>';
+  openModal('editModal');
+
+  // Show preview
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    var prev = document.getElementById('scanPreview');
+    if (prev) prev.innerHTML = '<img src="' + ev.target.result + '" style="max-width:100%;max-height:180px;border-radius:8px;opacity:0.7">';
+  };
+  reader.readAsDataURL(file);
+
+  // Run OCR
+  runOCR(file);
+}
+
+function runOCR(file) {
+  var statusEl = document.getElementById('scanStatus');
+  var barEl = document.getElementById('scanBar');
+
+  if (typeof Tesseract === 'undefined') {
+    if (statusEl) statusEl.textContent = '❌ OCR library not loaded — check internet connection';
+    return;
+  }
+
+  Tesseract.recognize(file, 'eng+fil', {
+    logger: function(m) {
+      if (m.status && statusEl) {
+        var labels = {
+          'loading tesseract core': 'Loading OCR engine...',
+          'initializing tesseract': 'Initializing...',
+          'loading language traineddata': 'Loading language data...',
+          'initializing api': 'Preparing scanner...',
+          'recognizing text': 'Reading text...'
+        };
+        statusEl.textContent = labels[m.status] || m.status;
+      }
+      if (typeof m.progress === 'number' && barEl) {
+        barEl.style.width = Math.round(m.progress * 100) + '%';
+      }
+    }
+  }).then(function(result) {
+    var text = result.data.text || '';
+    if (!text.trim()) {
+      if (statusEl) statusEl.textContent = '❌ Walang text na nabasa sa image. Try ulit with clearer photo.';
+      return;
+    }
+    // Parse fields from OCR text
+    var parsed = parseClientFromOCR(text);
+    // Add to import queue and show for editing
+    parsed._warn = parsed._warn || {};
+    parsed._fromScan = true;
+    IMPORT_QUEUE.push(parsed);
+    renderImportUI();
+    showToast('✅ Na-scan! I-check at i-edit bago i-import.', 'success');
+  }).catch(function(err) {
+    console.error('OCR error:', err);
+    if (statusEl) statusEl.textContent = '❌ Scan failed: ' + (err.message || err);
+  });
+}
+
+function parseClientFromOCR(text) {
+  var lines = text.split('\n').map(function(l){ return l.trim(); }).filter(Boolean);
+  var result = { name:'', phone:'', address:'', landmark:'', notes:'', lastService:'', lastServiceDate:'', usage:'', _warn:{} };
+
+  // Join all text for regex matching
+  var all = lines.join(' ');
+  var allLower = all.toLowerCase();
+
+  // Try to find phone number (09xx or +63 or 63xxx patterns)
+  var phoneMatch = all.match(/(?:0|(?:\+?63))[\s.-]?9[\s.-]?\d[\s.-]?\d[\s.-]?\d[\s.-]?\d[\s.-]?\d[\s.-]?\d[\s.-]?\d[\s.-]?\d/);
+  if (phoneMatch) {
+    result.phone = phoneMatch[0].replace(/[\s.-]/g, '');
+    if (result.phone.startsWith('+63')) result.phone = '0' + result.phone.slice(3);
+    else if (result.phone.startsWith('63') && result.phone.length === 12) result.phone = '0' + result.phone.slice(2);
+  } else {
+    result._warn.phone = true;
+  }
+
+  // Common form field patterns from the booking forms
+  var fieldPatterns = [
+    { key:'name', patterns:[/(?:name|pangalan|client\s*name|full\s*name)\s*[:\-—]?\s*(.+)/i] },
+    { key:'address', patterns:[/(?:address|tirahan|location)\s*[:\-—]?\s*(.+)/i] },
+    { key:'landmark', patterns:[/(?:landmark|tanda|malapit|near)\s*[:\-—]?\s*(.+)/i] },
+    { key:'lastService', patterns:[/(?:service|serbisyo|type of service)\s*[:\-—]?\s*(.+)/i] },
+    { key:'lastServiceDate', patterns:[/(?:date|petsa|schedule|preferred.*date|date.*preparation)\s*[:\-—]?\s*(.+)/i] }
+  ];
+
+  // Try each field pattern against each line
+  lines.forEach(function(line) {
+    fieldPatterns.forEach(function(fp) {
+      if (result[fp.key]) return; // Already found
+      fp.patterns.forEach(function(pat) {
+        var m = line.match(pat);
+        if (m && m[1]) {
+          var val = m[1].trim().replace(/[_]{2,}/g, '').trim();
+          if (val && val.length > 1) result[fp.key] = val;
+        }
+      });
+    });
+  });
+
+  // Try to extract AC info
+  var acNotes = [];
+  var brandMatch = all.match(/(?:brand|unit)\s*[:\-—]?\s*([\w\s]+?)(?:\s*(?:hp|horse|type|qty|\d))/i);
+  if (brandMatch) acNotes.push(brandMatch[1].trim());
+
+  var hpMatch = all.match(/(\d+(?:\.\d+)?)\s*(?:hp|horse\s*power)/i);
+  if (hpMatch) acNotes.push(hpMatch[0]);
+
+  // Unit type detection
+  var types = [];
+  if (/split/i.test(all)) types.push('Split');
+  if (/window/i.test(all)) types.push('Window');
+  if (/inverter/i.test(all)) types.push('Inverter');
+  if (/cassette/i.test(all)) types.push('Cassette');
+  if (types.length) acNotes.push(types.join(', '));
+
+  // Quantity
+  var qtyMatch = all.match(/(?:qty|quantity|how many|number of)\s*[:\-—]?\s*(\d+)/i);
+  if (qtyMatch) acNotes.push('qty ' + qtyMatch[1]);
+
+  // Years
+  var yrsMatch = all.match(/(\d+)\s*(?:yr|year|taon)/i);
+  if (yrsMatch) acNotes.push(yrsMatch[0]);
+
+  // Last cleaning
+  var cleanMatch = all.match(/(?:last.*clean|huling.*linis|kailan.*linis)\s*[:\-—]?\s*(.+?)(?:\n|$)/i);
+  if (cleanMatch && !result.lastServiceDate) {
+    var cd = cleanMatch[1].trim();
+    if (cd.length > 1 && cd.length < 50) {
+      result.notes = (result.notes ? result.notes + ' | ' : '') + 'Last cleaning: ' + cd;
+    }
+  }
+
+  if (acNotes.length) {
+    result.notes = (result.notes ? result.notes + ' | ' : '') + acNotes.join(', ');
+  }
+
+  // If name not found, try first non-trivial line that isn't a phone/address
+  if (!result.name) {
+    for (var i = 0; i < Math.min(lines.length, 10); i++) {
+      var ln = lines[i];
+      if (ln.length > 2 && ln.length < 50 && !/^\d/.test(ln) && !/address|phone|landmark|service|date|name|brand|unit|type|qty/i.test(ln)) {
+        result.name = ln;
+        result._warn.name = 'Auto-detected, baka mali';
+        break;
+      }
+    }
+  }
+
+  // Warn about empty required fields
+  if (!result.name) result._warn.name = 'Hindi nabasa';
+  if (!result.phone) result._warn.phone = 'Hindi nabasa';
+
+  return result;
 }
 
 function openClientModal(key){
