@@ -3080,6 +3080,7 @@ function renderClients() {
       <div class="panel-title">👥 Client Records (${clients.length})</div>
       <div style="display:flex;gap:7px;flex-wrap:wrap">
         <button class="btn btn-gold btn-sm" onclick="openNewClient()">➕ Add Client</button>
+        <button class="btn btn-primary btn-sm" onclick="openImportClients()">📥 Import Clients</button>
       </div>
     </div>
     <div style="padding:13px">
@@ -9319,6 +9320,218 @@ function saveNewClient(){
   closeModal('editModal');
   showToast('Client '+name+' added!','success');
   switchView('clients');
+}
+
+/* ===========================
+   IMPORT CLIENTS (Batch)
+=========================== */
+var IMPORT_QUEUE = [];
+
+function openImportClients() {
+  if (!IMPORT_QUEUE.length) {
+    // Pre-loaded extracted clients from screenshots
+    IMPORT_QUEUE = [
+      { name:'Dolores Gabriel', phone:'09055781602', address:'Purok 3, Caniogan, Calumpit, Bulacan', landmark:'Pagbaba ng tulay, Caniogan (baka kulang)', notes:'Aux, 1.0 HP, Split Type, 2 yrs old', lastService:'', lastServiceDate:'', usage:'', _warn:{landmark:true,lastServiceDate:true} },
+      { name:'Reginald Don Destura', phone:'09604149087', address:'111 Camia St., Alido, Bulihan, Malolos', landmark:'Alido Sub', notes:'Carrier, 1 HP, Window Type, qty 1 — AWM Deepclean (Panasonic Top Load) kasama', lastService:'Cleaning + AWM Deepclean', lastServiceDate:'2024-10-10', usage:'', _warn:{inverter:true,lastServiceDate:'walang taon, nilagay 2024'} },
+      { name:'Regina Baisas', phone:'09652363957', address:'245 El Canto St., Sta. Rita, Guiguinto, Bulacan', landmark:'Sta. Rita Elem', notes:'TCL 1HP Split Inverter (2 yrs) + LG 1HP Split Inverter (7 yrs), qty 2', lastService:'Cleaning', lastServiceDate:'2025-08-14', usage:'', _warn:{} },
+      { name:'Harold Gonzales', phone:'09678744749', address:'324 Paraan St., Matimbo, City of Malolos, Bulacan', landmark:'Primoway Trading', notes:'Midea, 1 HP, Split Type', lastService:'Aircon Cleaning', lastServiceDate:'', usage:'', _warn:{lastServiceDate:true,unitType:true} }
+    ];
+  }
+  renderImportUI();
+}
+
+function renderImportUI() {
+  document.getElementById('emTitle').textContent = '📥 Import Clients';
+  document.getElementById('emSub').textContent = IMPORT_QUEUE.length + ' client(s) ready to review — i-edit kung may mali, then Import';
+
+  var html = '<div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;background:var(--info-soft);border:1px solid var(--info);border-radius:8px;padding:10px 12px">' +
+    '💡 <strong>Galing sa Messenger screenshots.</strong> I-click ang field para i-edit. Mga may <span style="color:var(--warning)">⚠️</span> ay hindi sure — double-check mo.' +
+    '</div>';
+
+  html += '<div style="overflow-x:auto">';
+  IMPORT_QUEUE.forEach(function(c, i) {
+    var warn = c._warn || {};
+    var hasAnyWarn = Object.keys(warn).length > 0;
+    html += '<div class="import-card" style="background:var(--bg-elev2);border:1px solid ' + (hasAnyWarn ? 'var(--warning)' : 'var(--border)') + ';border-radius:10px;padding:12px;margin-bottom:10px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+    html += '<strong style="font-size:14px">#' + (i+1) + '</strong>';
+    html += '<div style="display:flex;gap:6px">';
+    html += '<button class="btn btn-danger btn-xs" onclick="removeImportRow('+i+')" title="Remove">✕</button>';
+    html += '<button class="btn btn-gold btn-sm" onclick="importOneClient('+i+')">📥 Import</button>';
+    html += '</div></div>';
+    html += '<div class="form-grid" style="gap:6px">';
+    html += importField(i, 'name', 'Pangalan *', c.name, warn.name);
+    html += importField(i, 'phone', 'Phone *', c.phone, warn.phone);
+    html += importField(i, 'address', 'Address', c.address, warn.address);
+    html += importField(i, 'landmark', 'Landmark', c.landmark || '', warn.landmark);
+    html += importField(i, 'notes', 'AC Info (brand/HP/type/qty/age)', c.notes, warn.notes);
+    html += importField(i, 'lastService', 'Last Service', c.lastService, warn.lastService);
+    html += importField(i, 'lastServiceDate', 'Last Service Date', c.lastServiceDate, warn.lastServiceDate);
+    html += '<div class="field"><label>Usage Frequency</label><select id="imp_usage_'+i+'" style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-elev);color:var(--text);font-size:12px">' +
+      '<option value="">— Piliin —</option>' +
+      USAGE_OPTS.map(function(u){ return '<option value="'+u.label+'"'+(c.usage===u.label?' selected':'')+'>'+u.label+'</option>'; }).join('') +
+      '</select></div>';
+    html += '</div></div>';
+  });
+  html += '</div>';
+
+  // Add blank row button
+  html += '<div style="text-align:center;margin-top:8px">';
+  html += '<button class="btn btn-outline btn-sm" onclick="addBlankImportRow()">➕ Dagdag pa</button>';
+  html += '</div>';
+
+  document.getElementById('emBody').innerHTML = html;
+  document.getElementById('emFoot').innerHTML =
+    '<button class="btn btn-outline btn-sm" onclick="closeModal(\'editModal\'); IMPORT_QUEUE=[];">Cancel</button>' +
+    '<button class="btn btn-gold btn-sm" onclick="importAllClients()">📥 Import All (' + IMPORT_QUEUE.length + ')</button>';
+  openModal('editModal');
+}
+
+function importField(i, key, label, val, warn) {
+  var warnTip = '';
+  if (warn) {
+    var txt = typeof warn === 'string' ? warn : 'Hindi sure — check mo';
+    warnTip = ' <span title="' + txt.replace(/"/g,'&quot;') + '" style="color:var(--warning);cursor:help">⚠️</span>';
+  }
+  var borderColor = warn ? 'var(--warning)' : 'var(--border)';
+  return '<div class="field"><label style="font-size:11px">' + label + warnTip + '</label>' +
+    '<input id="imp_' + key + '_' + i + '" value="' + String(val||'').replace(/"/g,'&quot;') + '" ' +
+    'style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid ' + borderColor + ';background:var(--bg-elev);color:var(--text);font-size:12px" ' +
+    'oninput="updateImportQueue('+i+',\''+key+'\')"></div>';
+}
+
+function updateImportQueue(i, key) {
+  var el = document.getElementById('imp_' + key + '_' + i);
+  if (el && IMPORT_QUEUE[i]) {
+    IMPORT_QUEUE[i][key] = el.value;
+    // Clear warning once edited
+    if (IMPORT_QUEUE[i]._warn) delete IMPORT_QUEUE[i]._warn[key];
+  }
+}
+
+function removeImportRow(i) {
+  IMPORT_QUEUE.splice(i, 1);
+  renderImportUI();
+  showToast('Removed from queue', 'info');
+}
+
+function addBlankImportRow() {
+  IMPORT_QUEUE.push({ name:'', phone:'', address:'', landmark:'', notes:'', lastService:'', lastServiceDate:'', usage:'', _warn:{} });
+  renderImportUI();
+  // Scroll to bottom
+  var body = document.getElementById('emBody');
+  if (body) body.scrollTop = body.scrollHeight;
+}
+
+function readImportRow(i) {
+  // Read current field values from DOM
+  var c = IMPORT_QUEUE[i];
+  if (!c) return null;
+  ['name','phone','address','landmark','notes','lastService','lastServiceDate'].forEach(function(k) {
+    var el = document.getElementById('imp_' + k + '_' + i);
+    if (el) c[k] = el.value.trim();
+  });
+  var usageEl = document.getElementById('imp_usage_' + i);
+  if (usageEl) c.usage = usageEl.value;
+  return c;
+}
+
+function importOneClient(i) {
+  var c = readImportRow(i);
+  if (!c) return;
+  if (!c.name || !c.phone) { showToast('Name at Phone required para sa #' + (i+1), 'error'); return; }
+  // Normalize phone
+  var ph = c.phone.replace(/[^0-9+]/g, '');
+  if (ph.startsWith('63') && ph.length === 12) ph = '0' + ph.slice(2);
+  // Check duplicate
+  var existing = mergeClients().find(function(x) {
+    var xph = (x.phone || '').replace(/[^0-9+]/g, '');
+    if (xph.startsWith('63') && xph.length === 12) xph = '0' + xph.slice(2);
+    return xph === ph;
+  });
+  if (existing) {
+    confirm2('Duplicate?', 'May client na with phone <strong>' + ph + '</strong> (' + existing.name + ').<br>I-overwrite ba ang info?', '⚠️', function() {
+      doImportClient(c, ph, existing.id);
+      IMPORT_QUEUE.splice(i, 1);
+      renderImportUI();
+    });
+    return;
+  }
+  doImportClient(c, ph, null);
+  IMPORT_QUEUE.splice(i, 1);
+  renderImportUI();
+}
+
+function doImportClient(c, phone, existingId) {
+  var id = existingId || 'CL-' + Date.now() + '-' + Math.random().toString(36).slice(2,6);
+  var notesArr = [];
+  if (c.landmark) notesArr.push('Landmark: ' + c.landmark);
+  if (c.notes) notesArr.push(c.notes);
+  var rec = {
+    id: id,
+    name: c.name,
+    phone: phone,
+    email: '',
+    address: c.address || '',
+    lastService: c.lastService || '',
+    lastServiceDate: c.lastServiceDate || '',
+    usage: c.usage || '',
+    notes: notesArr.join(' | '),
+    nextCleaningDate: calcNextCleaning(c.lastServiceDate, c.usage),
+    source: 'manual',
+    createdAt: existingId ? (CLIENTS[existingId] ? CLIENTS[existingId].createdAt : new Date().toISOString()) : new Date().toISOString()
+  };
+  CLIENTS[id] = rec;
+  saveLocalData();
+  syncClientToSheets(rec);
+  logActivity('📥', 'Imported client: ' + c.name, 'client');
+  showToast('✅ ' + c.name + ' imported!', 'success');
+}
+
+function importAllClients() {
+  // Read all current values first
+  var toImport = [];
+  for (var i = 0; i < IMPORT_QUEUE.length; i++) {
+    var c = readImportRow(i);
+    if (!c || !c.name || !c.phone) {
+      showToast('Client #' + (i+1) + ' — Name at Phone required', 'error');
+      return;
+    }
+    toImport.push(c);
+  }
+  var count = 0;
+  var dupes = [];
+  toImport.forEach(function(c, idx) {
+    var ph = c.phone.replace(/[^0-9+]/g, '');
+    if (ph.startsWith('63') && ph.length === 12) ph = '0' + ph.slice(2);
+    var existing = mergeClients().find(function(x) {
+      var xph = (x.phone || '').replace(/[^0-9+]/g, '');
+      if (xph.startsWith('63') && xph.length === 12) xph = '0' + xph.slice(2);
+      return xph === ph;
+    });
+    if (existing) {
+      dupes.push({ c: c, ph: ph, existingId: existing.id, existingName: existing.name });
+    } else {
+      doImportClient(c, ph, null);
+      count++;
+    }
+  });
+  if (dupes.length) {
+    confirm2('Duplicates Found', dupes.length + ' client(s) may duplikado:<br>' + dupes.map(function(d){ return '• <strong>' + d.c.name + '</strong> (phone matches ' + d.existingName + ')'; }).join('<br>') + '<br><br>I-overwrite ba lahat?', '⚠️', function() {
+      dupes.forEach(function(d) { doImportClient(d.c, d.ph, d.existingId); count++; });
+      showToast('✅ ' + (count + dupes.length) + ' clients imported!', 'success');
+      IMPORT_QUEUE = [];
+      closeModal('editModal');
+      switchView('clients');
+    });
+    if (count) showToast(count + ' new clients imported, ' + dupes.length + ' need confirmation', 'info');
+  } else {
+    IMPORT_QUEUE = [];
+    closeModal('editModal');
+    switchView('clients');
+    showToast('✅ ' + count + ' clients imported!', 'success');
+    addNotif('Imported ' + count + ' clients from batch', 'success');
+  }
 }
 
 function openClientModal(key){
