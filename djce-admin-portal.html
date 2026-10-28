@@ -8689,7 +8689,8 @@ async function fetchFromSheets() {
         if (!id) return;
         c.id = id;
         sheetClientIds.add(id);
-        if (!CLIENTS[id]) CLIENTS[id] = c;
+        if (!CLIENTS[id]) { c._synced = true; CLIENTS[id] = c; }
+        else { CLIENTS[id]._synced = true; }
       });
       // Remove clients that were deleted from sheets (only sheet-sourced ones)
       Object.keys(CLIENTS).forEach(function(k) {
@@ -8882,21 +8883,34 @@ function syncBookingToSheets(b) {
 function syncClientToSheets(c) {
   if (!c) return;
   callSheets({ action: 'saveClient', data: encodeURIComponent(JSON.stringify(c)) })
-    .then(function(res) { if (res && res.ok) { c._dirty = false; saveLocalData(); } })
+    .then(function(res) { if (res && res.ok) { c._dirty = false; c._synced = true; saveLocalData(); } })
     .catch(function() {});
 }
 
 function deleteClient(id, name) {
   if (!confirm('🗑️ Delete Client\n\nAre you sure you want to delete "' + name + '"?\n\nThis will remove them from Client Records permanently.')) return;
+  // Find the client's phone/name key (needed to hide clients that come from bookings)
+  var existing = null;
+  try { existing = mergeClients().find(function(c){ return c.id === id; }) || null; } catch(e) {}
+  var delKey = existing ? (existing.phone || existing.name) : '';
   // Remove from CLIENTS object
   if (CLIENTS[id]) delete CLIENTS[id];
   // Also check by phone/name key
   Object.keys(CLIENTS).forEach(function(k) {
     if (CLIENTS[k] && (CLIENTS[k].id === id || k === id)) delete CLIENTS[k];
   });
-  saveLocalData();
-  // Sync delete to Google Sheets
-  callSheets({ action: 'deleteClient', id: encodeURIComponent(id) }).catch(function(){});
+  // Does this client still come from bookings? Then keep a "deleted" marker so they stay hidden
+  var fromBookings = delKey && Object.values(BOOKINGS).some(function(b){ return (b.phone || b.name) === delKey; });
+  if (fromBookings) {
+    var tomb = { id: id, name: existing.name || name, phone: existing.phone || '', source: 'deleted', deleted: true };
+    CLIENTS[id] = tomb;
+    saveLocalData();
+    syncClientToSheets(tomb);
+  } else {
+    saveLocalData();
+    // Sync delete to Google Sheets
+    callSheets({ action: 'deleteClient', id: id }).catch(function(){});
+  }
   addNotif('Deleted client: ' + name, 'warning');
   syncActivityToSheets(session.username, 'Deleted client: ' + name, 'client');
   renderView('clients');
@@ -9148,8 +9162,9 @@ function mergeClients(){
   });
   // manual clients override
   Object.values(CLIENTS).forEach(c=>{
-    if (c.archived) return; // skip archived clients
     const key=c.phone||c.name;
+    if (c.deleted || c.source==='deleted') { delete map[key]; return; } // deleted client — hide even if bookings exist
+    if (c.archived) return; // skip archived clients
     map[key]={...map[key],...c,source:'manual'};
   });
   return Object.values(map).filter(c=>!c.archived).sort((a,b)=>(a.name||'').localeCompare(b.name||''));

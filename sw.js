@@ -1,5 +1,5 @@
 // DJ-CE Admin Portal — Service Worker (PWA)
-var CACHE_NAME = 'djce-portal-v10';
+var CACHE_NAME = 'djce-portal-v11';
 var URLS_TO_CACHE = [
   '/DJ-CE-website/djce-admin-portal.html'
 ];
