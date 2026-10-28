@@ -8888,7 +8888,11 @@ function syncClientToSheets(c) {
 }
 
 function deleteClient(id, name) {
-  if (!confirm('🗑️ Delete Client\n\nAre you sure you want to delete "' + name + '"?\n\nThis will remove them from Client Records permanently.')) return;
+  var safe = String(name || '').replace(/[<>&"]/g, '');
+  confirm2('Delete Client', 'Are you sure you want to delete "' + safe + '"?<br>This will remove them from Client Records.', '🗑️', function() { _deleteClientNow(id, name); });
+}
+
+function _deleteClientNow(id, name) {
   // Find the client's phone/name key (needed to hide clients that come from bookings)
   var existing = null;
   try { existing = mergeClients().find(function(c){ return c.id === id; }) || null; } catch(e) {}
@@ -8918,7 +8922,11 @@ function deleteClient(id, name) {
 }
 
 function archiveClient(id, name) {
-  if (!confirm('📦 Archive Client\n\nArchive "' + name + '"?\n\nThey will be hidden from the client list but data is kept.')) return;
+  var safe = String(name || '').replace(/[<>&"]/g, '');
+  confirm2('Archive Client', 'Archive "' + safe + '"?<br>They will be hidden from the client list but data is kept.', '📦', function() { _archiveClientNow(id, name); });
+}
+
+function _archiveClientNow(id, name) {
   // Mark as archived
   if (CLIENTS[id]) {
     CLIENTS[id].archived = true;
@@ -9141,6 +9149,7 @@ function mergeClients(){
   // from bookings
   Object.values(BOOKINGS).forEach(b=>{
     try{
+    if(b.status==='Deleted')return; // bookings in trash should not create clients
     const key=b.phone||b.name;
     if(!key)return;
     if(!map[key]){
