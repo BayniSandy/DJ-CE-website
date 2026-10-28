@@ -8917,7 +8917,7 @@ function _deleteClientNow(id, name) {
   }
   addNotif('Deleted client: ' + name, 'warning');
   syncActivityToSheets(session.username, 'Deleted client: ' + name, 'client');
-  renderView('clients');
+  switchView('clients');
   showToast('Client deleted', 'success');
 }
 
@@ -8941,7 +8941,7 @@ function _archiveClientNow(id, name) {
   saveLocalData();
   addNotif('Archived client: ' + name, 'info');
   syncActivityToSheets(session.username, 'Archived client: ' + name, 'client');
-  renderView('clients');
+  switchView('clients');
   showToast('Client archived', 'success');
 }
 
@@ -9648,7 +9648,7 @@ function saveCatalogService() {
   };
   saveLocalData();
   closeModal('editModal');
-  renderView('settings');
+  switchView('settings');
   showToast('Service catalog updated', 'success');
 }
 
@@ -9853,7 +9853,7 @@ function saveSecurityQuestion() {
   saveAccounts();
   logActivity('🔒', session.name + ' updated security question', 'settings');
   showToast('Security question saved!','success');
-  renderView('settings');
+  switchView('settings');
 }
 
 function changeMyPassword(){
