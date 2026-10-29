@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="DJ-CE Portal">
 <link rel="icon" type="image/png" href="logo-192.png">
 <link rel="apple-touch-icon" href="logo-192.png">
-<link rel="manifest" href="manifest.json">
+<link rel="manifest" href="/DJ-CE-website/manifest.json">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.7.0/jspdf.plugin.autotable.min.js"></script>
@@ -11025,8 +11025,18 @@ function changePinFromSettings() {
 // PWA Service Worker Registration
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
-    navigator.serviceWorker.register('sw.js').then(function(reg) {
+    navigator.serviceWorker.getRegistrations().then(function(regs) {
+      regs.forEach(function(r) { r.unregister(); });
+    }).then(function() {
+      return navigator.serviceWorker.register('/DJ-CE-website/sw.js', { scope: '/DJ-CE-website/' });
+    }).then(function(reg) {
       console.log('DJ-CE SW registered:', reg.scope);
+      reg.addEventListener('updatefound', function() {
+        var nw = reg.installing;
+        if (nw) nw.addEventListener('statechange', function() {
+          if (nw.state === 'activated') console.log('DJ-CE SW updated & activated');
+        });
+      });
     }).catch(function(err) {
       console.log('SW registration failed:', err);
     });

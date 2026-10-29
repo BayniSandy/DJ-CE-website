@@ -2,21 +2,25 @@
   "name": "DJ-CE Admin Portal",
   "short_name": "DJ-CE",
   "description": "DJ-CE Aircon & Electrical Services — Admin Portal",
+  "id": "/DJ-CE-website/djce-admin-portal.html",
   "start_url": "/DJ-CE-website/djce-admin-portal.html",
+  "scope": "/DJ-CE-website/",
   "display": "standalone",
   "background_color": "#0a1628",
   "theme_color": "#1a3566",
   "orientation": "any",
   "icons": [
     {
-      "src": "logo-192.png",
+      "src": "/DJ-CE-website/logo-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "logo-512.png",
+      "src": "/DJ-CE-website/logo-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }
