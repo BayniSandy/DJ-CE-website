@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>DJ-CE Service Portal</title>
 <meta name="theme-color" content="#0d1f3c">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -67,7 +67,8 @@
   --shadow: rgba(13,36,97,0.10);
   --deco-opacity: 0.05;
 }
-* { margin:0; padding:0; box-sizing:border-box; }
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html { touch-action:manipulation; -ms-touch-action:manipulation; }
 body {
   font-family:'Plus Jakarta Sans',sans-serif;
   background: var(--bg);
@@ -78,6 +79,9 @@ body {
   transition: background 0.3s, color 0.3s;
   position:relative;
   overflow-x:hidden;
+  overscroll-behavior:none;
+  -webkit-text-size-adjust:100%;
+  -webkit-user-select:none; user-select:none;
 }
 body::before, body::after {
   content:'';
@@ -106,6 +110,12 @@ body::after {
 .deco-2 { bottom:6%; left:4%; transform:rotate(15deg); font-size:140px; }
 
 #appContainer { position:relative; z-index:1; }
+
+/* ============ STANDALONE PWA (installed on homescreen) ============ */
+@media all and (display-mode: standalone) {
+  body { padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom); }
+  .bottom-nav { padding-bottom:env(safe-area-inset-bottom); }
+}
 
 /* ============ LOGIN ============ */
 .login-wrap {
@@ -156,6 +166,7 @@ body::after {
 
 .field { margin-bottom:14px; }
 .field label { display:block; font-size:11px; font-weight:700; color:var(--text-dim); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.4px; }
+input, select, textarea { -webkit-user-select:text; user-select:text; }
 .field input, .field select, .field textarea {
   width:100%; padding:11px 14px;
   border:1.5px solid var(--border); border-radius:10px;
