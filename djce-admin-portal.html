@@ -861,7 +861,7 @@ tr:hover td { background:var(--bg-elev2); }
         <button class="mode-btn" id="btnDark" onclick="setTheme('dark')">🌙</button>
       </div>
       <button class="btn btn-gold btn-sm" onclick="manualSync()" id="syncBtn">⟳ Sync</button>
-      <button class="btn btn-outline btn-sm" id="pwaInstallBtn" style="display:none" onclick="installPWA()" title="Install as app">📲 Install App</button>
+      <button class="btn btn-outline btn-sm" id="pwaInstallBtn" onclick="installPWA()" title="Install as app">📲 Install</button>
     </div>
   </div>
 
@@ -10516,7 +10516,7 @@ window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
   deferredPrompt = e;
   const btn = document.getElementById('pwaInstallBtn');
-  if (btn) btn.style.display = '';
+  if (btn) btn.textContent = '📲 Install App';
 });
 function installPWA() {
   if (!deferredPrompt) {
@@ -10527,8 +10527,6 @@ function installPWA() {
   deferredPrompt.userChoice.then(r => {
     if (r.outcome === 'accepted') showToast('DJ-CE Portal installed! 🎉', 'success');
     deferredPrompt = null;
-    const btn = document.getElementById('pwaInstallBtn');
-    if (btn) btn.style.display = 'none';
   });
 }
 
