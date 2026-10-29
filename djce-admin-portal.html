@@ -11025,18 +11025,10 @@ function changePinFromSettings() {
 // PWA Service Worker Registration
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
-    navigator.serviceWorker.getRegistrations().then(function(regs) {
-      regs.forEach(function(r) { r.unregister(); });
-    }).then(function() {
-      return navigator.serviceWorker.register('/DJ-CE-website/sw.js', { scope: '/DJ-CE-website/' });
-    }).then(function(reg) {
+    navigator.serviceWorker.register('/DJ-CE-website/sw.js', { scope: '/DJ-CE-website/' }).then(function(reg) {
       console.log('DJ-CE SW registered:', reg.scope);
-      reg.addEventListener('updatefound', function() {
-        var nw = reg.installing;
-        if (nw) nw.addEventListener('statechange', function() {
-          if (nw.state === 'activated') console.log('DJ-CE SW updated & activated');
-        });
-      });
+      // Force update check
+      reg.update();
     }).catch(function(err) {
       console.log('SW registration failed:', err);
     });
