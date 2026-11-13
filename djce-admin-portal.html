@@ -9801,10 +9801,75 @@ function openClientModal(key){
     ).join('')+'</tbody></table></div>' :
     '<div class="empty" style="padding:14px">No bookings on record</div>')+
     renderCommLogSection(c.name);
+  var cid = c.id || key;
+  var escapedId = String(cid).replace(/'/g,"\\'");
   document.getElementById('clmFoot').innerHTML=
     '<button class="btn btn-outline btn-sm" onclick="closeModal(\'clientModal\')">Close</button>'+
+    '<button class="btn btn-primary btn-sm" onclick="editClientModal(\''+escapedId+'\')">✏️ Edit</button>'+
     '<button class="btn btn-gold btn-sm" onclick="openNewBooking(\''+c.name+'\',\''+c.phone+'\',\''+c.address+'\');closeModal(\'clientModal\')">📋 New Booking</button>';
   openModal('clientModal');
+}
+
+function editClientModal(id){
+  var all=mergeClients();
+  var c=all.find(function(x){return x.id===id||x.phone===id||x.name===id;});
+  if(!c){showToast('Client not found','error');return;}
+  document.getElementById('emTitle').textContent='Edit Client';
+  document.getElementById('emSub').textContent='Update info for '+c.name;
+  document.getElementById('emBody').innerHTML=
+    '<input type="hidden" id="ec_id" value="'+(c.id||'')+'">'+
+    '<input type="hidden" id="ec_source" value="'+(c.source||'')+'">'+
+    '<div class="form-grid">'+
+    '<div class="field form-full"><label>Full Name *</label><input id="ec_name" value="'+escH(c.name||'')+'"></div>'+
+    '<div class="field"><label>Phone *</label><input id="ec_phone" type="tel" value="'+escH(c.phone||'')+'"></div>'+
+    '<div class="field"><label>Email</label><input id="ec_email" type="email" value="'+escH(c.email||'')+'"></div>'+
+    '<div class="field form-full"><label>Address</label><input id="ec_address" value="'+escH(c.address||'')+'"></div>'+
+    '<div class="field"><label>Last Service Done</label><input id="ec_lastSvc" value="'+escH(c.lastService||'')+'"></div>'+
+    '<div class="field"><label>Last Service Date</label><input type="date" id="ec_lastDate" value="'+(c.lastServiceDate||'')+'"></div>'+
+    '<div class="field"><label>AC Usage Frequency</label><select id="ec_usage"><option value="">— Select —</option>'+
+    USAGE_OPTS.map(function(u){return '<option'+(c.usage===u.label?' selected':'')+'>'+u.label+'</option>';}).join('')+
+    '</select></div>'+
+    '<div class="field"><label>Notes (unit info, brand, etc.)</label><input id="ec_notes" value="'+escH(c.notes||'')+'"></div>'+
+    '</div>';
+  document.getElementById('emFoot').innerHTML=
+    '<button class="btn btn-outline btn-sm" onclick="closeModal(\'editModal\');openClientModal(\''+String(c.id||c.phone||c.name).replace(/'/g,"\\'")+'\')" >Cancel</button>'+
+    '<button class="btn btn-gold btn-sm" onclick="saveEditClient()">💾 Save Changes</button>';
+  closeModal('clientModal');
+  openModal('editModal');
+}
+
+function escH(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function saveEditClient(){
+  var name=(document.getElementById('ec_name')?.value||'').trim();
+  var phone=(document.getElementById('ec_phone')?.value||'').trim();
+  if(!name||!phone){showToast('Name and phone are required','error');return;}
+  var id=document.getElementById('ec_id')?.value||'';
+  var source=document.getElementById('ec_source')?.value||'manual';
+  var lastDate=document.getElementById('ec_lastDate')?.value||'';
+  var usage=document.getElementById('ec_usage')?.value||'';
+  // If client came from bookings (no id or booking-derived), create/update in CLIENTS
+  if(!id||!CLIENTS[id]){
+    // Find existing CLIENTS entry by phone
+    var existId=Object.keys(CLIENTS).find(function(k){return CLIENTS[k].phone===phone;});
+    if(existId) id=existId; else { id='CL-'+Date.now(); source='manual'; }
+  }
+  CLIENTS[id]={
+    id:id, name:name, phone:phone,
+    email:document.getElementById('ec_email')?.value||'',
+    address:document.getElementById('ec_address')?.value||'',
+    lastService:document.getElementById('ec_lastSvc')?.value||'',
+    lastServiceDate:lastDate, usage:usage,
+    notes:document.getElementById('ec_notes')?.value||'',
+    nextCleaningDate:calcNextCleaning(lastDate,usage),
+    source:source, createdAt:CLIENTS[id]?.createdAt||new Date().toISOString()
+  };
+  saveLocalData();
+  logActivity('✏️','Edited client: '+name,'client');
+  syncClientToSheets(CLIENTS[id]);
+  closeModal('editModal');
+  showToast('Client '+name+' updated!','success');
+  switchView('clients');
 }
 
 function renderCommLogSection(clientName) {
