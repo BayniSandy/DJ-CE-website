@@ -1327,6 +1327,7 @@ let INVENTORY = [];      // { id, name, category, qty, unit, minStock, cost, not
 let FEEDBACK = [];       // { id, bookingId, clientName, rating, comment, date }
 let WARRANTY_LOG = [];   // { id, bookingId, clientName, service, warrantyDays, startDate, endDate, notes }
 let TIME_CORRECTIONS = []; // { id, bookingId, field:'actualStart'|'actualEnd', oldVal, newVal, reason, editedBy, timestamp }
+let BLACKLIST = []; // { id, clientId, clientName, phone, reason, blacklistedBy, blacklistedAt, status:'active'|'lifted', liftedBy, liftedAt, liftReason }
 var _loginAttempts = 0;
 var _loginLockUntil = 0;
 const MAX_LOGIN_ATTEMPTS = 5;
@@ -1782,6 +1783,9 @@ function renderDashboard() {
   if (overdueClients.length) alerts.push({type:'info', msg:`${overdueClients.length} client${overdueClients.length!==1?'s':''} overdue for cleaning`, action:"switchView('followup')"});
   const openComplaints = COMPLAINTS.filter(c=>c.status==='Open');
   if (openComplaints.length) alerts.push({type:'danger', msg:`${openComplaints.length} open complaint${openComplaints.length!==1?'s':''}`, action:"switchView('complaints')"});
+  var blActive = BLACKLIST.filter(b=>b.status==='active');
+  var blBookings = blActive.length ? allBks.filter(bk=>bk.status!=='Done'&&bk.status!=='Cancelled'&&isBlacklisted(bk.name,bk.phone)) : [];
+  if (blBookings.length) alerts.push({type:'danger', msg:`🚫 ${blBookings.length} active booking${blBookings.length!==1?'s':''} from blacklisted client${blBookings.length!==1?'s':''}`, action:"switchView('clients');document.getElementById('clFilter').value='blacklisted';filterClientsView('')"});
 
   return `
   <div class="welcome-banner">
@@ -2186,13 +2190,16 @@ function saveFeedback(bookingId) {
 function openBookingDetail(id) {
   const b = BOOKINGS[id];
   if (!b) return;
+  var detBl = isBlacklisted(b.name, b.phone);
+  var detBlEntry = detBl ? getBlacklistEntry(b.name, b.phone) : null;
   document.getElementById('bmTitle').textContent = b.name || 'Booking Details';
   document.getElementById('bmSub').textContent = `${b.refNo||b.id} · ${formatDate(b.date)}`;
   document.getElementById('bmBody').innerHTML = `
+    ${detBl?'<div style="background:#dc2626;color:#fff;padding:10px 14px;border-radius:10px;margin-bottom:14px;font-size:12.5px"><strong>🚫 BLACKLISTED CLIENT</strong> — '+escH(detBlEntry.reason)+'<br><span style="font-size:11px;opacity:.85">'+escH(detBlEntry.notes||'')+'</span></div>':''}
     <div class="form-grid">
       <div><div class="sec-divider">Client Information</div>
         <div class="info-row"><span class="info-label">Reference No.</span><span class="info-val"><strong style="color:var(--accent);font-family:monospace">${b.refNo||b.id}</strong></span></div>
-        <div class="info-row"><span class="info-label">Name</span><span class="info-val"><strong>${b.name||'—'}</strong></span></div>
+        <div class="info-row"><span class="info-label">Name</span><span class="info-val"><strong>${b.name||'—'}</strong>${detBl?renderBlacklistBadge(b.name,b.phone):''}</span></div>
         <div class="info-row"><span class="info-label">Phone</span><span class="info-val">${b.phone||'—'}</span></div>
         <div class="info-row"><span class="info-label">Email</span><span class="info-val">${b.email||'—'}</span></div>
         <div class="info-row"><span class="info-label">Address</span><span class="info-val">${b.address||'—'}</span></div>
@@ -2628,6 +2635,19 @@ function getServiceDetails() {
   return {fields:f, summary:parts.join(' · ')};
 }
 
+function checkBlacklistWarning() {
+  var n = (document.getElementById('nb_name')?.value||'').trim();
+  var p = (document.getElementById('nb_phone')?.value||'').trim();
+  var warn = document.getElementById('nb_blWarning');
+  if (!warn) return;
+  var bl = isBlacklisted(n, p);
+  var entry = bl ? getBlacklistEntry(n, p) : null;
+  warn.style.display = bl ? 'block' : 'none';
+  if (bl && entry) {
+    document.getElementById('nb_blReason').textContent = entry.reason + ' — ' + entry.notes;
+  }
+}
+
 function updateServiceFields() {
   const svc = document.getElementById('nb_service')?.value||'';
   const c = document.getElementById('nb_svcFields');
@@ -2635,12 +2655,19 @@ function updateServiceFields() {
 }
 
 function openNewBooking(name='',phone='',address='') {
+  var nbBlWarning = isBlacklisted(name, phone);
+  var nbBlEntry = nbBlWarning ? getBlacklistEntry(name, phone) : null;
   document.getElementById('emTitle').textContent = 'New Booking';
   document.getElementById('emSub').textContent = 'Walk-in, call-in, or booked by admin';
   document.getElementById('emBody').innerHTML = `
+    <div id="nb_blWarning" style="display:${nbBlWarning?'block':'none'};background:#dc2626;color:#fff;padding:12px 14px;border-radius:10px;margin-bottom:14px;font-size:12.5px">
+      <strong>🚫 WARNING: BLACKLISTED CLIENT</strong><br>
+      <span id="nb_blReason">${nbBlEntry?escH(nbBlEntry.reason)+' — '+escH(nbBlEntry.notes):''}</span><br>
+      <span style="font-size:11px;opacity:.85">Proceed with caution. Management approval recommended.</span>
+    </div>
     <div class="form-grid">
-      <div class="field form-full"><label>Client Name *</label><input id="nb_name" value="${name}" placeholder="e.g. Juan Dela Cruz"></div>
-      <div class="field"><label>Phone *</label><input id="nb_phone" value="${phone}" placeholder="09171234567" type="tel"></div>
+      <div class="field form-full"><label>Client Name *</label><input id="nb_name" value="${name}" placeholder="e.g. Juan Dela Cruz" oninput="checkBlacklistWarning()"></div>
+      <div class="field"><label>Phone *</label><input id="nb_phone" value="${phone}" placeholder="09171234567" type="tel" oninput="checkBlacklistWarning()"></div>
       <div class="field"><label>Email</label><input id="nb_email" placeholder="email@example.com" type="email"></div>
       <div class="field form-full"><label>Address *</label><input id="nb_address" value="${address}" placeholder="House/Street/Barangay/City"></div>
       <div class="field"><label>Landmark</label><input id="nb_landmark" placeholder="e.g. Near Jollibee"></div>
@@ -2903,10 +2930,11 @@ function quickStatusChange(id, newStatus) {
 }
 
 function renderBookingCard(b) {
-  return `<div class="booking-card" onclick="openBookingDetail('${b.id}')">
+  var bkBl = isBlacklisted(b.name, b.phone);
+  return `<div class="booking-card" onclick="openBookingDetail('${b.id}')"${bkBl?' style="border-left:4px solid #dc2626"':''}>
     <div class="bc-head">
-      <div class="bc-avatar">${(b.name||'?')[0].toUpperCase()}</div>
-      <div><div class="bc-name">${b.name||'—'}</div><div class="bc-id">${b.id}</div></div>
+      <div class="bc-avatar"${bkBl?' style="background:#dc2626;color:#fff"':''}>${(b.name||'?')[0].toUpperCase()}</div>
+      <div><div class="bc-name">${b.name||'—'}${bkBl?renderBlacklistBadge(b.name,b.phone):''}</div><div class="bc-id">${b.id}</div></div>
       <span class="status-badge s-${(b.status||'pending').toLowerCase()}" style="margin-left:auto">${b.status}</span>
     </div>
     <div class="bc-service">🔧 ${b.service||'—'} ${b.serviceTier==='VIP'?'<span style="background:var(--accent-soft);color:var(--accent);padding:1px 7px;border-radius:8px;font-size:10px;font-weight:700;margin-left:6px">⭐ VIP</span>':b.serviceTier==='Rush'?'<span style="background:var(--danger-soft);color:var(--danger);padding:1px 7px;border-radius:8px;font-size:10px;font-weight:700;margin-left:6px">🔴 Rush</span>':''}</div>
@@ -2956,7 +2984,8 @@ function renderMyJobs() {
       }
     }
     return '<div class="booking-card" style="border-left:4px solid '+(b.status==='Ongoing'?'var(--success)':b.status==='Confirmed'?'var(--accent)':'var(--warning)')+'" onclick="openBookingDetail(\''+b.id+'\')">'
-      +'<div class="bc-head"><div class="bc-avatar">'+((b.name||'?')[0].toUpperCase())+'</div><div><div class="bc-name">'+(b.name||'—')+'</div><div class="bc-id">'+b.id+'</div></div><span class="status-badge s-'+((b.status||'pending').toLowerCase())+'" style="margin-left:auto">'+b.status+'</span></div>'
+      +(isBlacklisted(b.name,b.phone)?'<div style="background:#dc2626;color:#fff;padding:6px 10px;border-radius:8px;margin-bottom:6px;font-size:11px;font-weight:700">🚫 BLACKLISTED CLIENT — mag-ingat!</div>':'')
+      +'<div class="bc-head"><div class="bc-avatar"'+(isBlacklisted(b.name,b.phone)?' style="background:#dc2626;color:#fff"':'')+'>'+((b.name||'?')[0].toUpperCase())+'</div><div><div class="bc-name">'+(b.name||'—')+renderBlacklistBadge(b.name,b.phone)+'</div><div class="bc-id">'+b.id+'</div></div><span class="status-badge s-'+((b.status||'pending').toLowerCase())+'" style="margin-left:auto">'+b.status+'</span></div>'
       +'<div class="bc-service">🔧 '+(b.service||'—')+'</div>'
       +(b.serviceDetails?'<div style="font-size:11px;color:var(--text-dim);margin-top:2px">'+b.serviceDetails+'</div>':'')
       +'<div style="font-size:12px;color:var(--text-dim);margin:6px 0">📍 '+(b.address||'—')+'</div>'
@@ -2971,10 +3000,13 @@ function renderMyJobs() {
       +'</div></div>';
   }
 
-  var html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:16px">'
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">'
+    +'<div style="display:grid;grid-template-columns:repeat(3,minmax(100px,1fr));gap:10px;flex:1">'
     +'<div class="stat-card stat-gold"><div class="stat-icon">📋</div><div class="stat-label">Today</div><div class="stat-value">'+todayJobs.length+'</div></div>'
     +'<div class="stat-card stat-info"><div class="stat-icon">🔧</div><div class="stat-label">Active</div><div class="stat-value">'+active.length+'</div></div>'
     +'<div class="stat-card stat-success"><div class="stat-icon">✅</div><div class="stat-label">Done</div><div class="stat-value">'+done.length+'</div></div>'
+    +'</div>'
+    +'<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="openTechComplaint()">🛡️ File Complaint</button>'
     +'</div>';
 
   if (todayJobs.length) {
@@ -2995,6 +3027,22 @@ function renderMyJobs() {
       +'<tbody>'+done.slice(0,20).map(function(b){return '<tr><td style="font-family:monospace;font-size:11px;color:var(--accent)">'+b.id+'</td><td>'+b.name+'</td><td style="font-size:12px">'+b.service+'</td><td>'+formatDate(b.date)+'</td><td>'+(b.amount?'₱'+parseFloat(b.amount).toLocaleString():'—')+'</td></tr>';}).join('')+'</tbody></table></div></div></div>';
   }
   return html;
+}
+
+function openTechComplaint() {
+  openNewComplaint();
+  // Pre-select technician source and current tech name
+  setTimeout(function() {
+    var srcSel = document.getElementById('cmp_source');
+    if (srcSel) { srcSel.value = 'technician'; toggleComplaintSource(); }
+    var techSel = document.getElementById('cmp_techName');
+    if (techSel) {
+      // Try to find matching tech option
+      for (var i = 0; i < techSel.options.length; i++) {
+        if (techSel.options[i].text === session.name) { techSel.selectedIndex = i; break; }
+      }
+    }
+  }, 100);
 }
 
 function techQuickStatus(id) {
@@ -3169,6 +3217,7 @@ function renderClients() {
           <option value="overdue">🔴 Overdue for Cleaning</option>
           <option value="due">⚠️ Due Soon (≤14 days)</option>
           <option value="ok">✅ On Track</option>
+          <option value="blacklisted">🚫 Blacklisted</option>
         </select>
       </div>
       <div class="tbl-wrap"><table>
@@ -3182,26 +3231,42 @@ function renderClients() {
 
 function renderClientRows(clients) {
   const now = new Date();
-  if (!clients.length) return `<tr><td colspan="8"><div class="empty"><div class="empty-ic">👥</div>No clients yet. Add old clients or sync bookings.</div></td></tr>`;
-  return clients.map(c => {
-    const next = c.nextCleaningDate ? new Date(c.nextCleaningDate) : null;
-    const diff = next ? (next - now)/(1000*60*60*24) : 999;
-    const sCls = !next ? 's-confirmed' : diff < 0 ? 's-cancelled' : diff <= 14 ? 's-pending' : 's-done';
-    const sLbl = !next ? 'No date' : diff < 0 ? 'Overdue' : diff <= 14 ? `Due ${formatDate(c.nextCleaningDate)}` : 'On track';
-    return `<tr>
-      <td><strong>${c.name}</strong>${c.email?`<div style="font-size:10.5px;color:var(--text-dim)">${c.email}</div>`:''}</td>
-      <td>${c.phone||'—'}</td>
-      <td style="font-size:12px;max-width:130px">${c.address||'—'}</td>
-      <td style="font-size:12px">${formatDate(c.lastServiceDate)}<div style="font-size:10.5px;color:var(--text-dim)">${c.lastService||'—'}</div></td>
-      <td style="font-size:11.5px">${c.usage||'<span style="color:var(--text-dim)">Not set</span>'}</td>
-      <td style="font-size:12px">${next?formatDate(c.nextCleaningDate):'—'}</td>
-      <td><span class="status-badge ${sCls}">${sLbl}</span></td>
-      <td style="white-space:nowrap">
-        <button class="btn btn-primary btn-xs" onclick="openClientModal('${c.phone||c.name}')">View</button>
-        <button class="btn btn-gold btn-xs" onclick="openNewBooking('${c.name}','${c.phone||''}','${c.address||''}')">📋 Book</button>
-        ${session.role==='owner'||session.role==='admin'?`<button class="btn btn-outline btn-xs" onclick="archiveClient('${(c.id||'').replace(/'/g,"\\'")}','${(c.name||'').replace(/'/g,"\\'")}')" title="Archive">📦</button><button class="btn btn-danger btn-xs" onclick="deleteClient('${(c.id||'').replace(/'/g,"\\'")}','${(c.name||'').replace(/'/g,"\\'")}')" title="Delete">🗑️</button>`:''}
-      </td>
-    </tr>`;
+  if (!clients.length) return '<tr><td colspan="8"><div class="empty"><div class="empty-ic">👥</div>No clients yet. Add old clients or sync bookings.</div></td></tr>';
+  return clients.map(function(c) {
+    var next = c.nextCleaningDate ? new Date(c.nextCleaningDate) : null;
+    var diff = next ? (next - now)/(1000*60*60*24) : 999;
+    var sCls = !next ? 's-confirmed' : diff < 0 ? 's-cancelled' : diff <= 14 ? 's-pending' : 's-done';
+    var sLbl = !next ? 'No date' : diff < 0 ? 'Overdue' : diff <= 14 ? 'Due '+formatDate(c.nextCleaningDate) : 'On track';
+    var bl = isBlacklisted(c.name, c.phone);
+    var eName = escH(c.name||'').replace(/'/g,'&#39;');
+    var ePhone = escH(c.phone||'').replace(/'/g,'&#39;');
+    var eId = escH(c.id||'').replace(/'/g,'&#39;');
+    var blBtn = '';
+    if (session.role==='owner'||session.role==='admin') {
+      if (bl) {
+        var blEntry = getBlacklistEntry(c.name, c.phone);
+        blBtn = '<button class="btn btn-success btn-xs" onclick="event.stopPropagation();liftBlacklist(\''+escH((blEntry||{}).id||'')+'\')" title="Lift Blacklist">✅ Lift</button>';
+      } else {
+        blBtn = '<button class="btn btn-outline btn-xs" style="color:var(--danger);border-color:var(--danger)" onclick="event.stopPropagation();openBlacklistModal(\''+eName+'\',\''+ePhone+'\',\''+eId+'\')" title="Blacklist">🚫</button>';
+      }
+    }
+    var adminBtns = (session.role==='owner'||session.role==='admin') ?
+      blBtn +
+      '<button class="btn btn-outline btn-xs" onclick="archiveClient(\''+eId+'\',\''+eName+'\')" title="Archive">📦</button>' +
+      '<button class="btn btn-danger btn-xs" onclick="deleteClient(\''+eId+'\',\''+eName+'\')" title="Delete">🗑️</button>' : '';
+    return '<tr'+(bl?' style="background:rgba(220,38,38,0.06)"':'')+'>' +
+      '<td><strong>'+escH(c.name)+'</strong>'+(bl?renderBlacklistBadge(c.name,c.phone):'')+(c.email?'<div style="font-size:10.5px;color:var(--text-dim)">'+escH(c.email)+'</div>':'')+'</td>' +
+      '<td>'+(c.phone||'—')+'</td>' +
+      '<td style="font-size:12px;max-width:130px">'+(c.address||'—')+'</td>' +
+      '<td style="font-size:12px">'+formatDate(c.lastServiceDate)+'<div style="font-size:10.5px;color:var(--text-dim)">'+(c.lastService||'—')+'</div></td>' +
+      '<td style="font-size:11.5px">'+(c.usage||'<span style="color:var(--text-dim)">Not set</span>')+'</td>' +
+      '<td style="font-size:12px">'+(next?formatDate(c.nextCleaningDate):'—')+'</td>' +
+      '<td><span class="status-badge '+sCls+'">'+sLbl+'</span></td>' +
+      '<td style="white-space:nowrap">' +
+        '<button class="btn btn-primary btn-xs" onclick="openClientModal(\''+(c.phone||c.name)+'\')">View</button>' +
+        '<button class="btn btn-gold btn-xs" onclick="openNewBooking(\''+eName+'\',\''+ePhone+'\',\''+(c.address||'').replace(/'/g,'&#39;')+'\')">📋 Book</button>' +
+        adminBtns +
+      '</td></tr>';
   }).join('');
 }
 
@@ -3213,6 +3278,7 @@ function filterClientsView(q) {
   if (filter==='overdue') clients = clients.filter(c=>c.nextCleaningDate&&new Date(c.nextCleaningDate)<now);
   else if (filter==='due') clients = clients.filter(c=>{if(!c.nextCleaningDate)return false;const d=new Date(c.nextCleaningDate);const diff=(d-now)/(1000*60*60*24);return diff>=0&&diff<=14;});
   else if (filter==='ok') clients = clients.filter(c=>{if(!c.nextCleaningDate)return true;return(new Date(c.nextCleaningDate)-now)/(1000*60*60*24)>14;});
+  else if (filter==='blacklisted') clients = clients.filter(c=>isBlacklisted(c.name,c.phone));
   const tb=document.getElementById('clTBody');
   if(tb)tb.innerHTML=renderClientRows(clients);
 }
@@ -3598,38 +3664,95 @@ function buildScheduleHtml(fromDate, toDate, techFilter, _unused) {
    COMPLAINTS & WARRANTY
 =========================== */
 function renderComplaints() {
-  const open = COMPLAINTS.filter(c=>c.status==='Open');
-  const resolved = COMPLAINTS.filter(c=>c.status==='Resolved');
+  var open = COMPLAINTS.filter(function(c){return c.status==='Open';});
+  var resolved = COMPLAINTS.filter(function(c){return c.status==='Resolved';});
+  var fromClient = COMPLAINTS.filter(function(c){return !c.source||c.source==='client';});
+  var fromTech = COMPLAINTS.filter(function(c){return c.source==='technician';});
   return `<div class="stats-grid">
     <div class="stat-card stat-danger"><div class="stat-icon">🔴</div><div class="stat-label">Open Cases</div><div class="stat-value">${open.length}</div></div>
     <div class="stat-card stat-success"><div class="stat-icon">✅</div><div class="stat-label">Resolved</div><div class="stat-value">${resolved.length}</div></div>
-    <div class="stat-card stat-info"><div class="stat-icon">🛡️</div><div class="stat-label">Total</div><div class="stat-value">${COMPLAINTS.length}</div></div>
+    <div class="stat-card stat-info"><div class="stat-icon">📋</div><div class="stat-label">From Clients</div><div class="stat-value">${fromClient.length}</div></div>
+    <div class="stat-card stat-warning"><div class="stat-icon">🔧</div><div class="stat-label">From Technicians</div><div class="stat-value">${fromTech.length}</div></div>
   </div>
   <div class="panel">
     <div class="panel-head">
       <div class="panel-title">🛡️ Complaints & Warranty Cases</div>
-      <button class="btn btn-gold btn-sm" onclick="openNewComplaint()">➕ File Case</button>
+      <div style="display:flex;gap:7px;flex-wrap:wrap">
+        <select id="cmpFilter" onchange="filterComplaints()" style="padding:5px 10px;border-radius:8px;border:1px solid var(--border);font-size:12px;background:var(--bg-elev2)">
+          <option value="all">All Cases</option>
+          <option value="open">🔴 Open Only</option>
+          <option value="resolved">✅ Resolved Only</option>
+          <option value="client">📋 Filed by Client</option>
+          <option value="technician">🔧 Filed by Technician</option>
+        </select>
+        <button class="btn btn-gold btn-sm" onclick="openNewComplaint()">➕ File Case</button>
+      </div>
     </div>
-    <div class="panel-body">
-      ${(function(){
-        if(!COMPLAINTS.length) return '<div class="empty"><div class="empty-ic">🛡️</div>No complaints or warranty cases yet.</div>';
-        return COMPLAINTS.slice().sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).map(function(c){
-          var cls='complaint-card '+(c.type==='Warranty'?'warranty':c.priority==='Urgent'?'urgent':'');
-          return '<div class="'+cls+'" data-cid="'+c.id+'" onclick="openComplaintDetail(this.dataset.cid)">'
-            +'<div class="cc-head"><div><div class="cc-title">'+c.title+'</div>'
-            +'<div class="cc-meta">'+(c.bookingId||'No booking')+' · '+c.clientName+' · '+formatDate(c.createdAt)+'</div></div>'
-            +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
-            +'<span class="status-badge s-'+(c.status==='Open'?'pending':'done')+'">'+c.status+'</span>'
-            +'<span class="status-badge" style="background:'+(c.type==='Warranty'?'var(--success-soft)':'var(--info-soft)')+';color:'+(c.type==='Warranty'?'var(--success)':'var(--info)')+'">'+c.type+'</span>'
-            +'</div></div>'
-            +'<div class="cc-meta" style="margin-top:4px">📝 '+(c.description?c.description.substring(0,80):'—')+(c.description&&c.description.length>80?'…':'')+'</div>'
-            +'</div>';
-        }).join('');
-      })()}
+    <div class="panel-body" id="cmpListBody">
+      ${renderComplaintsList(COMPLAINTS)}
     </div>
   </div>
+  ${renderBlacklistPanel()}
   ${renderWarrantyTracker()}
   ${renderBackjobHistory()}`;
+}
+
+function renderComplaintsList(list) {
+  if(!list.length) return '<div class="empty"><div class="empty-ic">🛡️</div>No complaints or warranty cases yet.</div>';
+  return list.slice().sort(function(a,b){return new Date(b.createdAt)-new Date(a.createdAt);}).map(function(c){
+    var cls='complaint-card '+(c.type==='Warranty'?'warranty':c.priority==='Urgent'?'urgent':'');
+    var srcBadge = c.source==='technician' ?
+      '<span style="background:rgba(245,158,11,0.15);color:#f59e0b;padding:1px 8px;border-radius:8px;font-size:10px;font-weight:700">🔧 Tech: '+escH(c.techName||'')+'</span>' :
+      '<span style="background:rgba(59,130,246,0.15);color:#3b82f6;padding:1px 8px;border-radius:8px;font-size:10px;font-weight:700">📋 Client</span>';
+    return '<div class="'+cls+'" data-cid="'+c.id+'" onclick="openComplaintDetail(this.dataset.cid)">'
+      +'<div class="cc-head"><div><div class="cc-title">'+escH(c.title)+'</div>'
+      +'<div class="cc-meta">'+(c.bookingId||'No booking')+' · '+(c.clientName||'N/A')+' · '+formatDate(c.createdAt)+'</div></div>'
+      +'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">'
+      +srcBadge
+      +'<span class="status-badge s-'+(c.status==='Open'?'pending':'done')+'">'+c.status+'</span>'
+      +'<span class="status-badge" style="background:'+(c.type==='Warranty'?'var(--success-soft)':'var(--info-soft)')+';color:'+(c.type==='Warranty'?'var(--success)':'var(--info)')+'">'+c.type+'</span>'
+      +'</div></div>'
+      +'<div class="cc-meta" style="margin-top:4px">📝 '+(c.description?escH(c.description.substring(0,80)):'—')+(c.description&&c.description.length>80?'…':'')+'</div>'
+      +'</div>';
+  }).join('');
+}
+function filterComplaints() {
+  var filter = document.getElementById('cmpFilter')?.value||'all';
+  var list = COMPLAINTS;
+  if (filter==='open') list = COMPLAINTS.filter(function(c){return c.status==='Open';});
+  else if (filter==='resolved') list = COMPLAINTS.filter(function(c){return c.status==='Resolved';});
+  else if (filter==='client') list = COMPLAINTS.filter(function(c){return !c.source||c.source==='client';});
+  else if (filter==='technician') list = COMPLAINTS.filter(function(c){return c.source==='technician';});
+  var body = document.getElementById('cmpListBody');
+  if (body) body.innerHTML = renderComplaintsList(list);
+}
+function renderBlacklistPanel() {
+  var active = BLACKLIST.filter(function(b){return b.status==='active';});
+  var lifted = BLACKLIST.filter(function(b){return b.status==='lifted';});
+  if (!BLACKLIST.length) return '';
+  return '<div class="panel" style="margin-top:18px"><div class="panel-head">' +
+    '<div class="panel-title">🚫 Blacklisted Clients ('+active.length+' active)</div></div>' +
+    '<div class="panel-body">' +
+    (active.length ? '<div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">These clients are flagged — bookings will show a warning.</div>' +
+    active.map(function(b){
+      return '<div class="complaint-card urgent" style="border-left-color:#dc2626">' +
+        '<div class="cc-head"><div><div class="cc-title">🚫 '+escH(b.clientName)+'</div>' +
+        '<div class="cc-meta">📞 '+(b.phone||'—')+' · Reason: <strong>'+escH(b.reason)+'</strong></div></div>' +
+        (session.role==='owner'||session.role==='admin' ? '<button class="btn btn-success btn-xs" onclick="event.stopPropagation();liftBlacklist(\''+b.id+'\')">✅ Lift</button>' : '') +
+        '</div>' +
+        '<div class="cc-meta" style="margin-top:4px">'+escH(b.notes||'')+'</div>' +
+        '<div class="cc-meta" style="margin-top:2px;font-size:10.5px;color:var(--text-dim)">Blacklisted by '+escH(b.blacklistedBy)+' · '+formatDate(b.blacklistedAt)+'</div>' +
+        '</div>';
+    }).join('') : '<div style="font-size:12.5px;color:var(--text-dim);padding:10px">No active blacklisted clients.</div>') +
+    (lifted.length ? '<div class="sec-divider" style="margin-top:12px">Previously Blacklisted (Lifted)</div>' +
+    lifted.map(function(b){
+      return '<div class="complaint-card" style="border-left-color:var(--success);opacity:.7">' +
+        '<div class="cc-head"><div><div class="cc-title">'+escH(b.clientName)+' <span style="color:var(--success);font-size:11px">✅ Lifted</span></div>' +
+        '<div class="cc-meta">Was: '+escH(b.reason)+' · Lifted by '+escH(b.liftedBy||'')+' · '+formatDate(b.liftedAt)+'</div></div></div>' +
+        (b.liftReason?'<div class="cc-meta" style="margin-top:2px">Reason: '+escH(b.liftReason)+'</div>':'') +
+        '</div>';
+    }).join('') : '') +
+    '</div></div>';
 }
 
 function renderWarrantyTracker() {
@@ -3772,67 +3895,123 @@ function deleteWarranty(id) {
 
 function openNewComplaint() {
   document.getElementById('cmTitle').textContent = 'File Complaint / Warranty';
-  document.getElementById('cmSub').textContent = 'Track client concerns and warranty claims';
+  document.getElementById('cmSub').textContent = 'Track complaints from clients AND technicians';
   document.getElementById('cmBody').innerHTML = `
+    <div class="form-grid">
     <div class="field"><label>Type *</label>
       <select id="cmp_type"><option>Complaint</option><option>Warranty</option></select>
+    </div>
+    <div class="field"><label>Filed By *</label>
+      <select id="cmp_source" onchange="toggleComplaintSource()">
+        <option value="client">📋 Client (reklamo ng client)</option>
+        <option value="technician">🔧 Technician (reklamo ng tech)</option>
+      </select>
+    </div>
+    </div>
+    <div id="cmp_techFields" style="display:none">
+      <div class="field"><label>🔧 Technician Name *</label>
+        <select id="cmp_techName"><option value="">— Select Technician —</option>${TECHNICIANS.map(function(t){return '<option>'+t+'</option>';}).join('')}</select>
+      </div>
+      <div class="field"><label>About / Against</label>
+        <select id="cmp_aboutType" onchange="toggleComplaintAbout()">
+          <option value="client">👤 About a Client</option>
+          <option value="situation">📝 About a Situation / Work Issue</option>
+        </select>
+      </div>
     </div>
     <div class="field"><label>Related Booking ID</label>
       <input id="cmp_booking" placeholder="e.g. BK-1234567890" list="bookingList">
       <datalist id="bookingList">${Object.keys(BOOKINGS).map(function(id){return '<option value="'+id+'">';}).join('')}</datalist>
     </div>
-    <div class="field"><label>Client Name *</label><input id="cmp_client" placeholder="Client name"></div>
+    <div class="field" id="cmp_clientField"><label>Client Name *</label><input id="cmp_client" placeholder="Client name"></div>
     <div class="field"><label>Title *</label><input id="cmp_title" placeholder="Brief description of issue"></div>
     <div class="field"><label>Priority</label>
       <select id="cmp_priority"><option>Normal</option><option>Urgent</option></select>
     </div>
     <div class="field"><label>Description *</label>
-      <textarea id="cmp_desc" placeholder="Detailed description of the complaint or warranty claim..."></textarea>
+      <textarea id="cmp_desc" placeholder="Detailed description ng nangyari..."></textarea>
     </div>`;
   document.getElementById('cmFoot').innerHTML = `
     <button class="btn btn-outline btn-sm" onclick="closeModal('complaintModal')">Cancel</button>
     <button class="btn btn-gold btn-sm" onclick="saveComplaint()">💾 File Case</button>`;
   openModal('complaintModal');
 }
+function toggleComplaintSource() {
+  var src = document.getElementById('cmp_source')?.value||'client';
+  var techFields = document.getElementById('cmp_techFields');
+  var clientField = document.getElementById('cmp_clientField');
+  if (techFields) techFields.style.display = src === 'technician' ? 'block' : 'none';
+  if (clientField) {
+    var aboutType = document.getElementById('cmp_aboutType')?.value||'client';
+    if (src === 'technician' && aboutType === 'situation') {
+      clientField.style.display = 'none';
+    } else {
+      clientField.style.display = 'block';
+    }
+  }
+}
+function toggleComplaintAbout() {
+  var aboutType = document.getElementById('cmp_aboutType')?.value||'client';
+  var clientField = document.getElementById('cmp_clientField');
+  if (clientField) clientField.style.display = aboutType === 'situation' ? 'none' : 'block';
+}
 
 function saveComplaint() {
-  const title = document.getElementById('cmp_title')?.value?.trim();
-  const client = document.getElementById('cmp_client')?.value?.trim();
-  const desc = document.getElementById('cmp_desc')?.value?.trim();
-  if (!title||!client||!desc) { showToast('Please fill in all required fields', 'error'); return; }
-  const id = 'CMP-'+Date.now();
-  COMPLAINTS.push({
-    id, title, clientName:client,
-    type: document.getElementById('cmp_type')?.value,
-    priority: document.getElementById('cmp_priority')?.value,
+  var title = (document.getElementById('cmp_title')?.value||'').trim();
+  var desc = (document.getElementById('cmp_desc')?.value||'').trim();
+  var source = document.getElementById('cmp_source')?.value||'client';
+  var client = (document.getElementById('cmp_client')?.value||'').trim();
+  var techName = (document.getElementById('cmp_techName')?.value||'').trim();
+  var aboutType = document.getElementById('cmp_aboutType')?.value||'client';
+  // Validation
+  if (!title||!desc) { showToast('Title and description are required', 'error'); return; }
+  if (source === 'client' && !client) { showToast('Client name is required', 'error'); return; }
+  if (source === 'technician' && !techName) { showToast('Please select a technician', 'error'); return; }
+  if (source === 'technician' && aboutType === 'client' && !client) { showToast('Client name is required', 'error'); return; }
+  var id = 'CMP-'+Date.now();
+  var entry = {
+    id:id, title:title,
+    clientName: (source === 'technician' && aboutType === 'situation') ? '' : client,
+    type: document.getElementById('cmp_type')?.value||'Complaint',
+    priority: document.getElementById('cmp_priority')?.value||'Normal',
     bookingId: document.getElementById('cmp_booking')?.value||'',
     description:desc, status:'Open', createdAt:new Date().toISOString(),
-    createdBy:session.name
-  });
+    createdBy:session.name,
+    source: source, // 'client' or 'technician'
+    techName: source === 'technician' ? techName : '',
+    aboutType: source === 'technician' ? aboutType : '' // 'client' or 'situation'
+  };
+  COMPLAINTS.push(entry);
   saveLocalData();
-  logActivity('🛡️', `New ${document.getElementById('cmp_type')?.value} filed: ${title}`, 'complaint');
+  var emoji = source === 'technician' ? '🔧' : '🛡️';
+  logActivity(emoji, 'New ' + entry.type + ' filed by ' + (source==='technician'?techName:'client') + ': ' + title, 'complaint');
   closeModal('complaintModal');
   switchView('complaints');
   showToast('Case filed successfully!', 'success');
 }
 
 function openComplaintDetail(id) {
-  const c = COMPLAINTS.find(x=>x.id===id);
+  var c = COMPLAINTS.find(function(x){return x.id===id;});
   if (!c) return;
+  var isTech = c.source === 'technician';
   document.getElementById('cmTitle').textContent = c.title;
-  document.getElementById('cmSub').textContent = `${c.id} · ${c.type} · ${c.priority}`;
-  document.getElementById('cmBody').innerHTML = `
-    <div class="info-row"><span class="info-label">Type</span><span class="info-val"><span class="status-badge" style="background:${c.type==='Warranty'?'var(--success-soft)':'var(--info-soft)'};color:${c.type==='Warranty'?'var(--success)':'var(--info)'}">${c.type}</span></span></div>
-    <div class="info-row"><span class="info-label">Status</span><span class="info-val"><span class="status-badge s-${c.status==='Open'?'pending':'done'}">${c.status}</span></span></div>
-    <div class="info-row"><span class="info-label">Priority</span><span class="info-val">${c.priority==='Urgent'?'🔴':'🟡'} ${c.priority}</span></div>
-    <div class="info-row"><span class="info-label">Client</span><span class="info-val">${c.clientName}</span></div>
-    <div class="info-row"><span class="info-label">Booking ID</span><span class="info-val">${c.bookingId||'—'}</span></div>
-    <div class="info-row"><span class="info-label">Filed</span><span class="info-val">${formatDate(c.createdAt)} by ${c.createdBy}</span></div>
-    <div style="margin-top:12px"><div class="sec-divider">Description</div><p style="font-size:13px;line-height:1.6">${c.description}</p></div>
-    ${c.resolution?`<div style="margin-top:12px"><div class="sec-divider">Resolution</div><p style="font-size:13px;line-height:1.6;color:var(--success)">${c.resolution}</p></div>`:''}
-    ${c.status==='Open'&&session.role!=='tech'?`
-    <div style="margin-top:16px"><div class="sec-divider">Resolve Case</div>
-    <div class="field"><label>Resolution Notes</label><textarea id="cmp_res" placeholder="How was this resolved?"></textarea></div></div>`:''}`;
+  document.getElementById('cmSub').textContent = c.id + ' · ' + c.type + ' · ' + c.priority;
+  document.getElementById('cmBody').innerHTML =
+    '<div class="info-row"><span class="info-label">Type</span><span class="info-val"><span class="status-badge" style="background:'+(c.type==='Warranty'?'var(--success-soft)':'var(--info-soft)')+';color:'+(c.type==='Warranty'?'var(--success)':'var(--info)')+'">'+c.type+'</span></span></div>' +
+    '<div class="info-row"><span class="info-label">Status</span><span class="info-val"><span class="status-badge s-'+(c.status==='Open'?'pending':'done')+'">'+c.status+'</span></span></div>' +
+    '<div class="info-row"><span class="info-label">Priority</span><span class="info-val">'+(c.priority==='Urgent'?'🔴':'🟡')+' '+c.priority+'</span></div>' +
+    '<div class="info-row"><span class="info-label">Filed By</span><span class="info-val">'+(isTech ?
+      '<span style="background:rgba(245,158,11,0.15);color:#f59e0b;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700">🔧 Technician: '+escH(c.techName||'')+'</span>' :
+      '<span style="background:rgba(59,130,246,0.15);color:#3b82f6;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700">📋 Client</span>')+'</span></div>' +
+    (isTech && c.aboutType ? '<div class="info-row"><span class="info-label">About</span><span class="info-val">'+(c.aboutType==='client'?'👤 About a Client':'📝 Situation / Work Issue')+'</span></div>' : '') +
+    (c.clientName ? '<div class="info-row"><span class="info-label">'+(isTech && c.aboutType==='client'?'Client Involved':'Client')+'</span><span class="info-val">'+escH(c.clientName)+(isBlacklisted(c.clientName,'')?renderBlacklistBadge(c.clientName,''):'')+'</span></div>' : '') +
+    '<div class="info-row"><span class="info-label">Booking ID</span><span class="info-val">'+(c.bookingId||'—')+'</span></div>' +
+    '<div class="info-row"><span class="info-label">Filed</span><span class="info-val">'+formatDate(c.createdAt)+' by '+escH(c.createdBy)+'</span></div>' +
+    '<div style="margin-top:12px"><div class="sec-divider">Description</div><p style="font-size:13px;line-height:1.6">'+escH(c.description)+'</p></div>' +
+    (c.resolution?'<div style="margin-top:12px"><div class="sec-divider">Resolution</div><p style="font-size:13px;line-height:1.6;color:var(--success)">'+escH(c.resolution)+'</p></div>':'') +
+    (c.status==='Open'&&session.role!=='tech'?
+    '<div style="margin-top:16px"><div class="sec-divider">Resolve Case</div>' +
+    '<div class="field"><label>Resolution Notes</label><textarea id="cmp_res" placeholder="How was this resolved?"></textarea></div></div>':'');
   document.getElementById('cmFoot').innerHTML = `
     <button class="btn btn-outline btn-sm" onclick="closeModal('complaintModal')">Close</button>
     ${c.status==='Open'&&session.role!=='tech'?`<button class="btn btn-success btn-sm" onclick="resolveComplaint('${c.id}')">✅ Mark Resolved</button>`:''}`;
@@ -8748,6 +8927,7 @@ function saveLocalData() {
   localStorage.setItem('djce_feedback', JSON.stringify(FEEDBACK));
   localStorage.setItem('djce_warranty', JSON.stringify(WARRANTY_LOG));
   localStorage.setItem('djce_time_corrections', JSON.stringify(TIME_CORRECTIONS));
+  localStorage.setItem('djce_blacklist', JSON.stringify(BLACKLIST));
 }
 
 function loadLocalData() {
@@ -8765,6 +8945,7 @@ function loadLocalData() {
   try { FEEDBACK = JSON.parse(localStorage.getItem('djce_feedback')||'[]'); } catch(e) { FEEDBACK=[]; }
   try { WARRANTY_LOG = JSON.parse(localStorage.getItem('djce_warranty')||'[]'); } catch(e) { WARRANTY_LOG=[]; }
   try { TIME_CORRECTIONS = JSON.parse(localStorage.getItem('djce_time_corrections')||'[]'); } catch(e) { TIME_CORRECTIONS=[]; }
+  try { BLACKLIST = JSON.parse(localStorage.getItem('djce_blacklist')||'[]'); } catch(e) { BLACKLIST=[]; }
   autoPurgeTrash();
 }
 
@@ -10056,12 +10237,18 @@ function openClientModal(key){
   const c=all.find(x=>x.phone===key||x.name===key||x.id===key);
   if(!c){showToast('Client not found','error');return;}
   const bks=Object.values(BOOKINGS).filter(b=>b.phone===c.phone||b.name===c.name);
+  var blActive = isBlacklisted(c.name, c.phone);
+  var blEntry = blActive ? getBlacklistEntry(c.name, c.phone) : null;
   document.getElementById('clmTitle').textContent=c.name;
   document.getElementById('clmSub').textContent=bks.length+' booking(s) · '+(c.source==='manual'?'Manual entry':'From bookings');
   document.getElementById('clmBody').innerHTML=
+    (blActive ? '<div style="background:#dc2626;color:#fff;padding:10px 14px;border-radius:10px;margin-bottom:14px;font-size:12.5px">' +
+    '<strong>🚫 BLACKLISTED</strong> — ' + escH(blEntry.reason) + '<br>' +
+    '<span style="font-size:11px;opacity:.85">By: ' + escH(blEntry.blacklistedBy) + ' · ' + formatDate(blEntry.blacklistedAt) + '</span>' +
+    (blEntry.notes ? '<br><span style="font-size:11px;opacity:.85">Notes: ' + escH(blEntry.notes) + '</span>' : '') + '</div>' : '') +
     '<div class="form-grid">'+
     '<div><div class="sec-divider">Client Info</div>'+
-    '<div class="info-row"><span class="info-label">Name</span><strong>'+c.name+'</strong></div>'+
+    '<div class="info-row"><span class="info-label">Name</span><strong>'+c.name+'</strong>'+(blActive?renderBlacklistBadge(c.name,c.phone):'')+'</div>'+
     '<div class="info-row"><span class="info-label">Phone</span>'+(c.phone||'—')+'</div>'+
     '<div class="info-row"><span class="info-label">Email</span>'+(c.email||'—')+'</div>'+
     '<div class="info-row"><span class="info-label">Address</span>'+(c.address||'—')+'</div>'+
@@ -10088,8 +10275,17 @@ function openClientModal(key){
     renderCommLogSection(c.name);
   var cid = c.id || key;
   var escapedId = String(cid).replace(/'/g,"\\'");
+  var blBtnHtml = '';
+  if (session.role==='owner'||session.role==='admin') {
+    if (blActive) {
+      blBtnHtml = '<button class="btn btn-success btn-sm" onclick="closeModal(\'clientModal\');liftBlacklist(\''+escH(blEntry.id)+'\')">✅ Lift Blacklist</button>';
+    } else {
+      blBtnHtml = '<button class="btn btn-danger btn-sm" onclick="closeModal(\'clientModal\');openBlacklistModal(\''+escH(c.name).replace(/'/g,'&#39;')+'\',\''+escH(c.phone||'').replace(/'/g,'&#39;')+'\',\''+escapedId+'\')">🚫 Blacklist</button>';
+    }
+  }
   document.getElementById('clmFoot').innerHTML=
     '<button class="btn btn-outline btn-sm" onclick="closeModal(\'clientModal\')">Close</button>'+
+    blBtnHtml+
     '<button class="btn btn-primary btn-sm" onclick="editClientModal(\''+escapedId+'\')">✏️ Edit</button>'+
     '<button class="btn btn-gold btn-sm" onclick="openNewBooking(\''+c.name+'\',\''+c.phone+'\',\''+c.address+'\');closeModal(\'clientModal\')">📋 New Booking</button>';
   openModal('clientModal');
@@ -10162,6 +10358,97 @@ function saveEditClient(){
   closeModal('editModal');
   showToast('Client '+name+' updated!','success');
   switchView('clients');
+}
+
+/* ===========================
+   CLIENT BLACKLIST SYSTEM
+=========================== */
+function isBlacklisted(clientName, phone) {
+  return BLACKLIST.some(function(b) {
+    return b.status === 'active' && (
+      (clientName && b.clientName && b.clientName.toLowerCase() === clientName.toLowerCase()) ||
+      (phone && b.phone && b.phone.replace(/\D/g,'') === phone.replace(/\D/g,''))
+    );
+  });
+}
+function getBlacklistEntry(clientName, phone) {
+  return BLACKLIST.find(function(b) {
+    return b.status === 'active' && (
+      (clientName && b.clientName && b.clientName.toLowerCase() === clientName.toLowerCase()) ||
+      (phone && b.phone && b.phone.replace(/\D/g,'') === phone.replace(/\D/g,''))
+    );
+  });
+}
+function renderBlacklistBadge(clientName, phone) {
+  if (!isBlacklisted(clientName, phone)) return '';
+  return '<span style="background:#dc2626;color:#fff;padding:1px 8px;border-radius:8px;font-size:10px;font-weight:700;margin-left:6px;letter-spacing:.3px">🚫 BLACKLISTED</span>';
+}
+function openBlacklistModal(clientName, phone, clientId) {
+  document.getElementById('cmTitle').textContent = '🚫 Blacklist Client';
+  document.getElementById('cmSub').textContent = clientName;
+  document.getElementById('cmBody').innerHTML =
+    '<div style="background:var(--danger-soft);border:1px solid var(--danger);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12.5px;color:var(--danger)">' +
+    '⚠️ <strong>Warning:</strong> This will flag this client as blacklisted. All future bookings will show a warning. Only owner/admin can lift a blacklist.</div>' +
+    '<div class="field"><label>Client Name</label><input id="bl_name" value="' + escH(clientName || '') + '" readonly style="opacity:.7"></div>' +
+    '<div class="field"><label>Phone</label><input id="bl_phone" value="' + escH(phone || '') + '" readonly style="opacity:.7"></div>' +
+    '<div class="field"><label>Reason for Blacklisting *</label>' +
+    '<select id="bl_reason_type" onchange="document.getElementById(\'bl_reason_custom\').style.display=this.value===\'Other\'?\'block\':\'none\'">' +
+    '<option value="Non-payment">💸 Non-payment / Di nagbayad</option>' +
+    '<option value="Rude/Disrespectful">😤 Rude / Disrespectful behavior</option>' +
+    '<option value="Unsafe location">⚠️ Unsafe location / Dangerous</option>' +
+    '<option value="Fraudulent">🚨 Fraudulent / Scam</option>' +
+    '<option value="Harassment">🚫 Harassment of technician</option>' +
+    '<option value="Repeated no-show">👻 Repeated no-show</option>' +
+    '<option value="Other">📝 Other (specify)</option></select></div>' +
+    '<div class="field" id="bl_reason_custom" style="display:none"><label>Specify Reason</label><input id="bl_custom" placeholder="Describe the reason..."></div>' +
+    '<div class="field"><label>Detailed Report / Notes *</label>' +
+    '<textarea id="bl_notes" rows="3" placeholder="Isulat ang buong detalye ng nangyari..."></textarea></div>' +
+    '<input type="hidden" id="bl_clientId" value="' + escH(clientId || '') + '">';
+  document.getElementById('cmFoot').innerHTML =
+    '<button class="btn btn-outline btn-sm" onclick="closeModal(\'complaintModal\')">Cancel</button>' +
+    '<button class="btn btn-danger btn-sm" onclick="confirmBlacklist()">🚫 Blacklist Client</button>';
+  openModal('complaintModal');
+}
+function confirmBlacklist() {
+  var name = (document.getElementById('bl_name')?.value || '').trim();
+  var phone = (document.getElementById('bl_phone')?.value || '').trim();
+  var reasonType = document.getElementById('bl_reason_type')?.value || '';
+  var customReason = (document.getElementById('bl_custom')?.value || '').trim();
+  var notes = (document.getElementById('bl_notes')?.value || '').trim();
+  var reason = reasonType === 'Other' ? (customReason || 'Other') : reasonType;
+  if (!notes) { showToast('Please provide a detailed report/notes', 'error'); return; }
+  if (isBlacklisted(name, phone)) { showToast('Client is already blacklisted', 'error'); return; }
+  BLACKLIST.push({
+    id: 'BL-' + Date.now(),
+    clientId: document.getElementById('bl_clientId')?.value || '',
+    clientName: name,
+    phone: phone,
+    reason: reason,
+    notes: notes,
+    blacklistedBy: session.name,
+    blacklistedAt: new Date().toISOString(),
+    status: 'active'
+  });
+  saveLocalData();
+  logActivity('🚫', 'Blacklisted client: ' + name + ' — ' + reason, 'blacklist');
+  closeModal('complaintModal');
+  showToast('Client ' + name + ' has been blacklisted', 'warning');
+  switchView('clients');
+}
+function liftBlacklist(blId) {
+  var entry = BLACKLIST.find(function(b) { return b.id === blId; });
+  if (!entry) return;
+  confirm2('Lift Blacklist', 'Lift the blacklist on <strong>' + escH(entry.clientName) + '</strong>?<br>They will be able to book again without warning.', '✅', function() {
+    var liftReason = prompt('Reason for lifting blacklist (optional):') || '';
+    entry.status = 'lifted';
+    entry.liftedBy = session.name;
+    entry.liftedAt = new Date().toISOString();
+    entry.liftReason = liftReason;
+    saveLocalData();
+    logActivity('✅', 'Lifted blacklist: ' + entry.clientName, 'blacklist');
+    showToast('Blacklist lifted for ' + entry.clientName, 'success');
+    switchView('clients');
+  });
 }
 
 function renderCommLogSection(clientName) {
