@@ -1264,6 +1264,11 @@ const UNIT_ILLUSTRATIONS = {
 const DJCE_BIZ = {name:'DJ-CE Airconditioning Services',dti:'Business Name No. 5947985',bir:'TIN: ____________',address:'Caniogan, Calumpit, Bulacan, Philippines 3003',phone:'0976 259 2458',fb:'DJ-CE Aircon Cleaning Services',tagline:'We serve with quality and care!'};
 const SERVICES = ['Aircon Cleaning – Window Type','Aircon Cleaning – Split Type','Aircon Cleaning – Mounted/Cassette','AWM Deep Cleaning','Aircon Installation','Aircon Relocation','Aircon Dismantle','Freon Charging','Breaker Installation','Aircon Bracket','Electrical Work','Plumbing'];
 const SERVICE_AREAS = ['Calumpit','Malolos','Balagtas','Guiguinto','Bocaue','Pulilan','Plaridel','San Miguel','Apalit','Sto. Tomas','Angeles','San Fernando'];
+const SERVICE_TIERS = [
+  {value:'Normal', label:'🟢 Normal', color:'var(--success)', desc:'Regular scheduling'},
+  {value:'VIP', label:'⭐ VIP', color:'var(--accent)', desc:'Priority client — additional fee'},
+  {value:'Rush', label:'🔴 Rush', color:'var(--danger)', desc:'Urgent/same-day — rush fee applies'}
+];
 
 let session = null;
 let BOOKINGS = {};
@@ -1599,6 +1604,7 @@ function buildNav() {
     <div class="nav-item" data-tip="Clients" onclick="switchView('clients',event)"><span class="ic">👥</span><span class="nav-label">Client Records</span></div>
     <div class="nav-item" data-tip="Follow-up Center" onclick="switchView('followup',event)"><span class="ic">🔔</span><span class="nav-label">Follow-up Center</span>${alertBadge}</div>
     <div class="nav-item" data-tip="Schedule" onclick="switchView('schedule',event)"><span class="ic">📅</span><span class="nav-label">Schedule</span></div>
+    <div class="nav-item" data-tip="Logistics" onclick="switchView('logistics',event)"><span class="ic">🚐</span><span class="nav-label">Route / Logistics</span></div>
     <div class="nav-sec">Documents</div>
     <div class="nav-item" data-tip="Service Receipts" onclick="switchView('receipts',event)"><span class="ic">🧾</span><span class="nav-label">Service Receipts</span></div>
     <div class="nav-item" data-tip="Complaints & Warranty" onclick="switchView('complaints',event)"><span class="ic">🛡️</span><span class="nav-label">Complaints & Warranty</span></div>`;
@@ -1712,6 +1718,7 @@ function renderView(name) {
     case 'unitsales': return renderUnitSales();
     case 'mama-commissions': return renderMamaCommissions();
     case 'investor-dashboard': return renderInvestorDashboard();
+    case 'logistics': return renderLogistics();
     default: return '<div class="empty"><div class="empty-ic">🚧</div>Coming soon</div>';
   }
 }
@@ -2193,6 +2200,8 @@ function openBookingDetail(id) {
       </div>
       <div><div class="sec-divider">Service Details</div>
         <div class="info-row"><span class="info-label">Service</span><span class="info-val"><strong>${b.service||'—'}</strong></span></div>
+        <div class="info-row"><span class="info-label">Tier</span><span class="info-val">${b.serviceTier==='VIP'?'<span style="background:var(--accent-soft);color:var(--accent);padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700">⭐ VIP</span>':b.serviceTier==='Rush'?'<span style="background:var(--danger-soft);color:var(--danger);padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700">🔴 Rush</span>':'<span style="color:var(--success);font-size:12px">🟢 Normal</span>'}</span></div>
+        ${b.contactPerson?'<div class="info-row"><span class="info-label">Contact @ Site</span><span class="info-val"><strong>'+b.contactPerson+'</strong>'+(b.contactPhone?' · '+b.contactPhone:'')+'</span></div>':''}
         <div class="info-row"><span class="info-label">Date</span><span class="info-val">${formatDate(b.date)}</span></div>
         <div class="info-row"><span class="info-label">Time</span><span class="info-val">${b.time||'—'}</span></div>
         <div class="info-row"><span class="info-label">Status</span><span class="info-val"><span class="status-badge s-${(b.status||'pending').toLowerCase()}">${b.status||'Pending'}</span></span></div>
@@ -2260,6 +2269,15 @@ function openBookingDetail(id) {
         <select id="detStatus">
           ${['Pending','Confirmed','Ongoing','Done','For Backjob','Completed - Rebooked','Cancelled'].map(s=>`<option ${b.status===s?'selected':''}>${s}</option>`).join('')}
         </select>
+      </div>
+      <div class="field"><label>⭐ Service Tier</label>
+        <select id="detTier">${SERVICE_TIERS.map(t=>'<option value="'+t.value+'" '+(b.serviceTier===t.value?'selected':'')+'>'+t.label+'</option>').join('')}</select>
+      </div>
+      <div class="field"><label>👤 Contact Person @ Site</label>
+        <input type="text" id="detContact" value="${b.contactPerson||''}" placeholder="Sino aabutan sa bahay?">
+      </div>
+      <div class="field"><label>📱 Contact Person Phone</label>
+        <input type="tel" id="detContactPhone" value="${b.contactPhone||''}" placeholder="Phone ng aabutan">
       </div>
       <div class="field"><label>Notes</label>
         <input type="text" id="detNotes" value="${b.notes||''}" placeholder="Internal notes">
@@ -2445,6 +2463,14 @@ function updateBooking(id) {
   const nextClean = document.getElementById('detNextClean')?.value||'';
   const referred = document.getElementById('detReferred')?.value||'';
 
+  // Service tier + contact person
+  var tier = document.getElementById('detTier')?.value||'';
+  var contactPerson = document.getElementById('detContact')?.value||'';
+  var contactPhone = document.getElementById('detContactPhone')?.value||'';
+  if (tier) b.serviceTier = tier;
+  if (contactPerson !== undefined) b.contactPerson = contactPerson;
+  if (contactPhone !== undefined) b.contactPhone = contactPhone;
+
   if (tech) b.technician = tech;
   var oldStatus = b.status;
   if (status) b.status = status;
@@ -2618,6 +2644,8 @@ function openNewBooking(name='',phone='',address='') {
       <div class="field"><label>Email</label><input id="nb_email" placeholder="email@example.com" type="email"></div>
       <div class="field form-full"><label>Address *</label><input id="nb_address" value="${address}" placeholder="House/Street/Barangay/City"></div>
       <div class="field"><label>Landmark</label><input id="nb_landmark" placeholder="e.g. Near Jollibee"></div>
+      <div class="field"><label>👤 Contact Person @ Site</label><input id="nb_contact" placeholder="Sino aabutan sa bahay?"></div>
+      <div class="field"><label>📱 Contact Person Phone</label><input id="nb_contactPhone" type="tel" placeholder="Phone ng aabutan"></div>
       <div class="field form-full"><label>Service *</label>
         <select id="nb_service" onchange="updateServiceFields()">
           <option value="">— Select Service —</option>
@@ -2635,6 +2663,9 @@ function openNewBooking(name='',phone='',address='') {
       </div>
       <div class="field"><label>Assign Technician</label>
         <select id="nb_tech"><option value="">— To be assigned —</option>${TECHNICIANS.map(t=>`<option>${t}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>⭐ Service Tier</label>
+        <select id="nb_tier" onchange="updateTierBadge()"><option value="Normal">🟢 Normal</option><option value="VIP">⭐ VIP (+ additional fee)</option><option value="Rush">🔴 Rush (+ rush fee)</option></select>
       </div>
       <div class="field"><label>Amount (₱)</label><input type="number" id="nb_amount" placeholder="0.00"></div>
       <div class="field"><label>AC Usage Frequency</label>
@@ -2688,7 +2719,10 @@ async function saveBooking() {
     id, refNo, name, phone,
     email: document.getElementById('nb_email')?.value||'',
     address, landmark: document.getElementById('nb_landmark')?.value||'',
+    contactPerson: document.getElementById('nb_contact')?.value||'',
+    contactPhone: document.getElementById('nb_contactPhone')?.value||'',
     service, serviceDetails: fields, serviceDetailsSummary: summary,
+    serviceTier: document.getElementById('nb_tier')?.value||'Normal',
     date, time: getSelectedTime(),
     technician: document.getElementById('nb_tech')?.value||'',
     amount: document.getElementById('nb_amount')?.value||'',
@@ -2875,7 +2909,7 @@ function renderBookingCard(b) {
       <div><div class="bc-name">${b.name||'—'}</div><div class="bc-id">${b.id}</div></div>
       <span class="status-badge s-${(b.status||'pending').toLowerCase()}" style="margin-left:auto">${b.status}</span>
     </div>
-    <div class="bc-service">🔧 ${b.service||'—'}</div>
+    <div class="bc-service">🔧 ${b.service||'—'} ${b.serviceTier==='VIP'?'<span style="background:var(--accent-soft);color:var(--accent);padding:1px 7px;border-radius:8px;font-size:10px;font-weight:700;margin-left:6px">⭐ VIP</span>':b.serviceTier==='Rush'?'<span style="background:var(--danger-soft);color:var(--danger);padding:1px 7px;border-radius:8px;font-size:10px;font-weight:700;margin-left:6px">🔴 Rush</span>':''}</div>
     <div class="bc-meta">
       <span class="bc-tag" style="background:var(--bg-elev2)">📅 ${formatDate(b.date)}</span>
       <span class="bc-tag" style="background:var(--bg-elev2)">👷 ${b.technician||'Unassigned'}</span>
@@ -3821,6 +3855,172 @@ function resolveComplaint(id) {
 }
 
 /* ===========================
+   LOGISTICS / ROUTE GROUPING
+=========================== */
+
+// Area day assignments — editable via settings
+var AREA_SCHEDULE = JSON.parse(localStorage.getItem('djce_area_schedule')||'null') || {
+  'Calumpit': ['Mon','Wed','Fri'],
+  'Malolos': ['Mon','Wed','Fri'],
+  'Guiguinto': ['Tue','Thu','Sat'],
+  'Balagtas': ['Tue','Thu','Sat'],
+  'Pulilan': ['Tue','Thu'],
+  'Plaridel': ['Tue','Thu'],
+  'Bocaue': ['Mon','Wed'],
+  'Apalit': ['Wed','Fri'],
+  'San Miguel': ['Fri'],
+  'Sto. Tomas': ['Sat'],
+  'Angeles': ['Sat'],
+  'San Fernando': ['Sat']
+};
+
+function saveAreaSchedule(){ localStorage.setItem('djce_area_schedule', JSON.stringify(AREA_SCHEDULE)); }
+
+function detectArea(address){
+  if(!address) return 'Unknown';
+  var addr = address.toLowerCase();
+  for(var i=0;i<SERVICE_AREAS.length;i++){
+    if(addr.indexOf(SERVICE_AREAS[i].toLowerCase())!==-1) return SERVICE_AREAS[i];
+  }
+  return 'Other';
+}
+
+function renderLogistics(){
+  var today = new Date();
+  var todayStr = today.toISOString().split('T')[0];
+  var dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var todayDay = dayNames[today.getDay()];
+
+  // Get active bookings
+  var active = Object.values(BOOKINGS).filter(function(b){
+    return b.status!=='Deleted' && b.status!=='Cancelled' && b.status!=='Done' && b.status!=='Completed - Rebooked';
+  });
+
+  // Group bookings by area
+  var byArea = {};
+  active.forEach(function(b){
+    var area = detectArea(b.address);
+    if(!byArea[area]) byArea[area]=[];
+    byArea[area].push(b);
+  });
+
+  // Today's bookings grouped by area
+  var todayBookings = active.filter(function(b){ return b.date===todayStr; });
+  var todayByArea = {};
+  todayBookings.forEach(function(b){
+    var area = detectArea(b.address);
+    if(!todayByArea[area]) todayByArea[area]=[];
+    todayByArea[area].push(b);
+  });
+
+  // Generate week view (7 days)
+  var weekDays = [];
+  for(var d=0;d<7;d++){
+    var dt = new Date(today);
+    dt.setDate(today.getDate()+d);
+    var ds = dt.toISOString().split('T')[0];
+    var dn = dayNames[dt.getDay()];
+    var bks = active.filter(function(b){ return b.date===ds; });
+    var areas = {};
+    bks.forEach(function(b){ var a=detectArea(b.address); if(!areas[a])areas[a]=[]; areas[a].push(b); });
+    weekDays.push({date:ds, day:dn, label:formatDate(ds), bookings:bks, areas:areas, isToday:d===0});
+  }
+
+  return '<div class="panel">'+
+    '<div class="panel-head"><div class="panel-title">🚐 Route / Logistics Planner</div></div>'+
+    '<div class="panel-body">'+
+
+    // Today's Route Overview
+    '<div class="sec-divider">📍 Today\'s Route — '+todayDay+', '+formatDate(todayStr)+' ('+todayBookings.length+' jobs)</div>'+
+    (todayBookings.length ?
+      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:20px">'+
+      Object.keys(todayByArea).sort().map(function(area){
+        var bks=todayByArea[area];
+        var tierBadge = function(b){ return b.serviceTier==='VIP'?'<span style="background:var(--accent-soft);color:var(--accent);padding:1px 5px;border-radius:6px;font-size:9px;font-weight:700">⭐VIP</span>':b.serviceTier==='Rush'?'<span style="background:var(--danger-soft);color:var(--danger);padding:1px 5px;border-radius:6px;font-size:9px;font-weight:700">🔴RUSH</span>':''; };
+        return '<div style="background:var(--bg-elev2);border-radius:10px;padding:14px;border:1px solid var(--border)">'+
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'+
+          '<div style="font-weight:700;font-size:14px;color:var(--accent)">📍 '+area+'</div>'+
+          '<span style="background:var(--accent-soft);color:var(--accent);padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700">'+bks.length+' job'+(bks.length>1?'s':'')+'</span>'+
+          '</div>'+
+          bks.map(function(b){
+            var loc = b.locationInfo||{};
+            var alerts = [];
+            if(loc.closedRoad) alerts.push('🚧');
+            if(loc.floodProne) alerts.push('🌊');
+            if(loc.needStockWater) alerts.push('💧Stock');
+            return '<div style="padding:8px 0;border-top:1px solid var(--border);font-size:12px" onclick="openBookingDetail(\''+b.id+'\')" style="cursor:pointer">'+
+              '<div style="display:flex;justify-content:space-between;align-items:center">'+
+              '<strong>'+b.name+'</strong> '+tierBadge(b)+
+              '<span class="status-badge s-'+(b.status||'pending').toLowerCase()+'" style="font-size:10px">'+b.status+'</span>'+
+              '</div>'+
+              '<div style="color:var(--text-dim);font-size:11px;margin-top:2px">'+b.service+' · '+(b.time||'—')+'</div>'+
+              '<div style="color:var(--text-dim);font-size:11px">📍 '+(b.address||'—')+'</div>'+
+              (b.contactPerson?'<div style="color:var(--info);font-size:11px">👤 '+b.contactPerson+(b.contactPhone?' · '+b.contactPhone:'')+'</div>':'')+
+              (alerts.length?'<div style="font-size:11px;margin-top:2px">⚠️ '+alerts.join(' ')+'</div>':'')+
+              '</div>';
+          }).join('')+
+          '</div>';
+      }).join('')+
+      '</div>'
+      : '<div class="empty" style="padding:20px;margin-bottom:16px"><div class="empty-ic">🎉</div>Walang naka-schedule ngayong araw</div>')+
+
+    // Week Ahead
+    '<div class="sec-divider">📅 7-Day Route Overview</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:20px">'+
+    weekDays.map(function(wd){
+      var areaKeys = Object.keys(wd.areas).sort();
+      return '<div style="background:'+(wd.isToday?'var(--accent-soft)':'var(--bg-elev2)')+';border-radius:10px;padding:12px;border:1px solid '+(wd.isToday?'var(--accent)':'var(--border)')+'">'+
+        '<div style="font-weight:700;font-size:12px;color:'+(wd.isToday?'var(--accent)':'var(--text)')+';margin-bottom:6px">'+wd.day+' — '+wd.label+(wd.isToday?' (TODAY)':'')+'</div>'+
+        '<div style="font-size:20px;font-weight:800;color:var(--text);margin-bottom:4px">'+wd.bookings.length+'</div>'+
+        '<div style="font-size:11px;color:var(--text-dim)">'+
+        (areaKeys.length ? areaKeys.map(function(a){ return '<span style="display:inline-block;background:var(--bg);padding:1px 6px;border-radius:6px;margin:1px 2px;font-size:10px">'+a+' ('+wd.areas[a].length+')</span>'; }).join('') : '<span style="color:var(--muted)">No jobs</span>')+
+        '</div></div>';
+    }).join('')+
+    '</div>'+
+
+    // Area Schedule reference
+    '<div class="sec-divider">🗺️ Area Day Assignments</div>'+
+    '<div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">Gamitin ito bilang guide para ma-group ang bookings per area per day. I-edit sa settings kung gusto mo palitan.</div>'+
+    '<div class="tbl-wrap"><table><thead><tr><th>Area</th><th>Assigned Days</th><th>Pending Jobs</th></tr></thead><tbody>'+
+    SERVICE_AREAS.map(function(area){
+      var days = AREA_SCHEDULE[area]||[];
+      var count = byArea[area]?byArea[area].length:0;
+      var isTodays = days.indexOf(todayDay)!==-1;
+      return '<tr style="'+(isTodays?'background:var(--accent-soft)':'')+'">'+
+        '<td><strong>'+area+'</strong>'+(isTodays?' <span style="color:var(--accent);font-size:10px">TODAY</span>':'')+'</td>'+
+        '<td>'+days.map(function(d){ return '<span style="display:inline-block;background:var(--bg-elev2);padding:1px 8px;border-radius:8px;font-size:11px;margin:1px 2px;'+(d===todayDay?'background:var(--accent);color:#fff;font-weight:700':'')+'">'+d+'</span>'; }).join(' ')+'</td>'+
+        '<td style="text-align:center;font-weight:700;color:'+(count?'var(--accent)':'var(--muted)')+'">'+count+'</td></tr>';
+    }).join('')+
+    '</tbody></table></div>'+
+
+    // Mismatched bookings alert
+    (function(){
+      var mismatched=[];
+      active.forEach(function(b){
+        if(!b.date) return;
+        var bDate=new Date(b.date+'T00:00:00');
+        var bDay=dayNames[bDate.getDay()];
+        var area=detectArea(b.address);
+        var sched=AREA_SCHEDULE[area]||[];
+        if(sched.length && sched.indexOf(bDay)===-1){
+          mismatched.push({booking:b, area:area, day:bDay, expected:sched.join('/')});
+        }
+      });
+      if(!mismatched.length) return '';
+      return '<div style="background:var(--warning-soft);border:1px solid var(--warning);border-radius:10px;padding:14px;margin-top:16px">'+
+        '<div style="font-weight:700;color:var(--warning);margin-bottom:8px">⚠️ Mismatched Route Alert — '+mismatched.length+' booking(s) sa maling area day</div>'+
+        mismatched.map(function(m){
+          return '<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)" onclick="openBookingDetail(\''+m.booking.id+'\')" style="cursor:pointer">'+
+            '<strong>'+m.booking.name+'</strong> — '+m.area+' booked on <strong>'+m.day+'</strong> (usually '+m.expected+')'+
+            '</div>';
+        }).join('')+
+        '</div>';
+    })()+
+
+    '</div></div>';
+}
+
+/* ===========================
    RECEIPTS / JOB ORDER
 =========================== */
 function renderReceipts() {
@@ -3876,9 +4076,10 @@ function openReceiptModal(id, type='receipt') {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;border-bottom:1px solid #e8eef8">
         <div style="padding:12px 20px;border-right:1px solid #e8eef8">
           <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#0d1f3c;margin-bottom:6px">BILL TO:</div>
-          <div style="font-size:12.5px;font-weight:700;color:#0a1628">${b.name||'—'}</div>
+          <div style="font-size:12.5px;font-weight:700;color:#0a1628">${b.name||'—'} ${b.serviceTier==='VIP'?'<span style="background:#fff3cd;color:#b8860b;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700">⭐ VIP</span>':b.serviceTier==='Rush'?'<span style="background:#fde8e6;color:#c00;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700">🔴 RUSH</span>':''}</div>
           <div style="font-size:11px;color:#555;margin-top:2px">${b.address||'—'}</div>
           <div style="font-size:11px;color:#555">${b.phone||''}${b.email?' · '+b.email:''}</div>
+          ${b.contactPerson?'<div style="font-size:10.5px;color:#0d1f3c;margin-top:3px;font-weight:600">👤 Contact @ site: '+b.contactPerson+(b.contactPhone?' · '+b.contactPhone:'')+'</div>':''}
         </div>
         <div style="padding:12px 20px">
           <div style="display:grid;grid-template-columns:auto 1fr;gap:3px 8px;font-size:11px">
@@ -3947,7 +4148,8 @@ function openReceiptModal(id, type='receipt') {
         <div>
           <div style="font-size:10px;font-weight:700;color:#0d1f3c;margin-bottom:4px">MODE OF PAYMENT:</div>
           <div style="font-size:11px">${b.payment||'Cash / GCash'}</div>
-          <div style="border-top:1px solid #0d1f3c;margin-top:22px;padding-top:4px;font-size:9.5px;color:#555">Client Signature / Received by</div>
+          ${b.contactPerson?'<div style="font-size:10px;color:#333;margin-top:6px"><strong>Authorized Rep:</strong> '+b.contactPerson+(b.contactPhone?' · '+b.contactPhone:'')+'</div>':''}
+          <div style="border-top:1px solid #0d1f3c;margin-top:22px;padding-top:4px;font-size:9.5px;color:#555">Client / Authorized Rep Signature</div>
         </div>
         <div style="text-align:right">
           <div style="font-size:10px;font-weight:700;color:#0d1f3c;margin-bottom:4px">PREPARED BY:</div>
@@ -4035,7 +4237,8 @@ function downloadReceiptPDF() {
 
   // Info fields right side
   var qx=hx, qy=39;
-  var infoFields=[['Date',dateStr],['Received from',b.name||''],['Address',b.address||''],['',b.landmark||''],['Contact No.',b.phone||'']];
+  var infoFields=[['Date',dateStr],['Received from',(b.name||'')+(b.serviceTier&&b.serviceTier!=='Normal'?' ['+b.serviceTier+']':'')],['Address',b.address||''],['',b.landmark||''],['Contact No.',b.phone||'']];
+  if(b.contactPerson) infoFields.push(['Contact @Site',b.contactPerson+(b.contactPhone?' · '+b.contactPhone:'')]);
   fs(8); draw(180,190,210,0.2);
   infoFields.forEach(function(r){
     if(r[0]){ fn('bold'); fc(...NAVY); txt(r[0], qx, qy); txt(':', qx+24, qy); }
@@ -9344,6 +9547,50 @@ function renderNotesHtml(notes){
   return notes.replace(/\n/g,'<br>');
 }
 
+/* ===== LOCATION INFO FIELDS ===== */
+function locationInfoFields(prefix, data){
+  data = data || {};
+  var d = data.locationInfo || {};
+  return '<div class="sec-divider" style="margin-top:10px">📍 Location Details (for technician)</div>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:8px 16px;padding:6px 0">'+
+    '<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer"><input type="checkbox" id="'+prefix+'_locClosed" style="width:16px;height:16px" '+(d.closedRoad?'checked':'')+'>🚧 Saradong daan</label>'+
+    '<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer"><input type="checkbox" id="'+prefix+'_locFlood" style="width:16px;height:16px" '+(d.floodProne?'checked':'')+'>🌊 Flood-prone / High tide area</label>'+
+    '<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer"><input type="checkbox" id="'+prefix+'_locStockH2O" style="width:16px;height:16px" '+(d.needStockWater?'checked':'')+'>💧 Need mag-stock ng tubig</label>'+
+    '</div>'+
+    '<div class="form-grid">'+
+    '<div class="field"><label>💧 Water Pressure</label><select id="'+prefix+'_locWater">'+
+    '<option value="">— Select —</option>'+
+    '<option'+(d.waterPressure==='Malakas'?' selected':'')+'>Malakas</option>'+
+    '<option'+(d.waterPressure==='Mahina'?' selected':'')+'>Mahina</option>'+
+    '<option'+(d.waterPressure==='Walang tubig'?' selected':'')+'>Walang tubig</option>'+
+    '<option'+(d.waterPressure==='Hindi alam'?' selected':'')+'>Hindi alam</option>'+
+    '</select></div>'+
+    '<div class="field"><label>🚗 Access / Parking</label><input id="'+prefix+'_locAccess" placeholder="e.g. Narrow road, walang parking" value="'+escH(d.accessNotes||'')+'"></div>'+
+    '<div class="field form-full"><label>📝 Other Location Notes</label><input id="'+prefix+'_locOther" placeholder="e.g. 2nd floor, gate code 1234, may aso" value="'+escH(d.otherNotes||'')+'"></div>'+
+    '</div>';
+}
+function getLocationInfo(prefix){
+  return {
+    closedRoad: !!(document.getElementById(prefix+'_locClosed')&&document.getElementById(prefix+'_locClosed').checked),
+    floodProne: !!(document.getElementById(prefix+'_locFlood')&&document.getElementById(prefix+'_locFlood').checked),
+    needStockWater: !!(document.getElementById(prefix+'_locStockH2O')&&document.getElementById(prefix+'_locStockH2O').checked),
+    waterPressure: document.getElementById(prefix+'_locWater')?.value||'',
+    accessNotes: document.getElementById(prefix+'_locAccess')?.value||'',
+    otherNotes: document.getElementById(prefix+'_locOther')?.value||''
+  };
+}
+function renderLocationBadges(loc){
+  if(!loc) return '';
+  var badges=[];
+  if(loc.closedRoad) badges.push('<span style="background:var(--danger-soft);color:var(--danger);padding:2px 8px;border-radius:10px;font-size:10.5px;font-weight:600">🚧 Saradong daan</span>');
+  if(loc.floodProne) badges.push('<span style="background:var(--info-soft);color:var(--info);padding:2px 8px;border-radius:10px;font-size:10.5px;font-weight:600">🌊 Flood-prone</span>');
+  if(loc.needStockWater) badges.push('<span style="background:var(--warning-soft);color:var(--warning);padding:2px 8px;border-radius:10px;font-size:10.5px;font-weight:600">💧 Stock tubig</span>');
+  if(loc.waterPressure) badges.push('<span style="background:var(--bg-elev2);color:var(--text-dim);padding:2px 8px;border-radius:10px;font-size:10.5px">💧 '+loc.waterPressure+'</span>');
+  if(loc.accessNotes) badges.push('<span style="background:var(--bg-elev2);color:var(--text-dim);padding:2px 8px;border-radius:10px;font-size:10.5px">🚗 '+escH(loc.accessNotes)+'</span>');
+  if(loc.otherNotes) badges.push('<span style="background:var(--bg-elev2);color:var(--text-dim);padding:2px 8px;border-radius:10px;font-size:10.5px">📝 '+escH(loc.otherNotes)+'</span>');
+  return badges.length ? '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">'+badges.join('')+'</div>' : '';
+}
+
 /* ===== ADD CLIENT VIEW ===== */
 function openNewClient(){
   document.getElementById('emTitle').textContent='Add Client Record';
@@ -9363,6 +9610,7 @@ function openNewClient(){
     '</select></div>'+
     '<div class="field form-full"><label>Notes (unit info, brand, etc.)</label>'+richNotesEditor('nc_notes','')+'</div>'+
     '</div>'+
+    locationInfoFields('nc',{})+
     '<div style="background:var(--info-soft);border:1px solid var(--info);border-radius:8px;padding:10px 12px;font-size:12px;margin-top:6px">'+
     '💡 Next cleaning date will be auto-calculated based on usage frequency. Perfect for importing old clients!</div>';
   document.getElementById('emFoot').innerHTML=
@@ -9387,6 +9635,7 @@ function saveNewClient(){
     lastCleaningInfo:document.getElementById('nc_lastInfo')?.value||'',
     usage,
     notes:getNotesContent('nc_notes'),
+    locationInfo:getLocationInfo('nc'),
     nextCleaningDate:calcNextCleaning(lastDate,usage),
     source:'manual',createdAt:new Date().toISOString()
   };
@@ -9817,6 +10066,7 @@ function openClientModal(key){
     '<div class="info-row"><span class="info-label">Email</span>'+(c.email||'—')+'</div>'+
     '<div class="info-row"><span class="info-label">Address</span>'+(c.address||'—')+'</div>'+
     '<div class="info-row"><span class="info-label">Landmark</span>'+(c.landmark||'—')+'</div>'+
+    renderLocationBadges(c.locationInfo)+
     '</div>'+
     '<div><div class="sec-divider">Service Tracking</div>'+
     '<div class="info-row"><span class="info-label">Last Service</span>'+(c.lastService||'—')+'</div>'+
@@ -9867,7 +10117,8 @@ function editClientModal(id){
     USAGE_OPTS.map(function(u){return '<option'+(c.usage===u.label?' selected':'')+'>'+u.label+'</option>';}).join('')+
     '</select></div>'+
     '<div class="field form-full"><label>Notes (unit info, brand, etc.)</label>'+richNotesEditor('ec_notes',c.notes||'')+'</div>'+
-    '</div>';
+    '</div>'+
+    locationInfoFields('ec',c);
   document.getElementById('emFoot').innerHTML=
     '<button class="btn btn-outline btn-sm" onclick="closeModal(\'editModal\');openClientModal(\''+String(c.id||c.phone||c.name).replace(/'/g,"\\'")+'\')" >Cancel</button>'+
     '<button class="btn btn-gold btn-sm" onclick="saveEditClient()">💾 Save Changes</button>';
@@ -9901,6 +10152,7 @@ function saveEditClient(){
     lastCleaningInfo:document.getElementById('ec_lastInfo')?.value||'',
     usage:usage,
     notes:getNotesContent('ec_notes'),
+    locationInfo:getLocationInfo('ec'),
     nextCleaningDate:calcNextCleaning(lastDate,usage),
     source:source, createdAt:CLIENTS[id]?.createdAt||new Date().toISOString()
   };

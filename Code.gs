@@ -19,9 +19,10 @@ var HEADERS = {
   Bookings: [
     'Booking ID','Ref No','Created At','Name','Phone','Email',
     'House No','Street','Barangay','City','Full Address','Landmark','Lat','Lng',
-    'Service','Service Details','Date','Time Slot',
+    'Service','Service Details','Service Tier','Date','Time Slot',
     'Technician','Status','Amount','Fee Service','Fee Parts','Fee Transpo','Fee Other','Fee Discount',
     'Usage Frequency','Next Cleaning Date','Notes','Source','Followed Up','Completed At',
+    'Contact Person','Contact Person Phone','Location Info',
     'Deleted At','Deleted By','Archived At'
   ],
   Accounts: [
@@ -31,7 +32,7 @@ var HEADERS = {
   Clients: [
     'Client ID','Name','Phone','Email','Address','Landmark',
     'Last Service','Last Service Date','Last Cleaning Info','Usage Frequency',
-    'Next Cleaning Date','Notes','Source','Created At'
+    'Next Cleaning Date','Notes','Location Info','Source','Created At'
   ],
   Complaints: [
     'Complaint ID','Title','Client Name','Booking ID','Type',
@@ -212,6 +213,7 @@ function submitBooking(p) {
     data.lng          || '',
     svcSummary,
     svcDetails,
+    data.serviceTier  || 'Normal',
     data.date         || '',
     data.timeSlot     || data.time || '',
     data.technician   || '',
@@ -228,6 +230,9 @@ function submitBooking(p) {
     data.source       || 'website',
     'false',
     '',
+    data.contactPerson || '',
+    data.contactPhone  || '',
+    data.locationInfo ? JSON.stringify(data.locationInfo) : '',
     '', '', ''
   ];
 
@@ -295,6 +300,13 @@ function updateBooking(p) {
       if (data.deletedBy)   setCellByKey(sheet, i+1, colMap, 'deletedBy', data.deletedBy);
       if (data.archivedAt)  setCellByKey(sheet, i+1, colMap, 'archivedAt', data.archivedAt);
       if (data.followedUp)  setCellByKey(sheet, i+1, colMap, 'followedUp', data.followedUp);
+      if (data.serviceTier) setCellByKey(sheet, i+1, colMap, 'serviceTier', data.serviceTier);
+      if (data.contactPerson !== undefined) setCellByKey(sheet, i+1, colMap, 'contactPerson', data.contactPerson);
+      if (data.contactPhone !== undefined) setCellByKey(sheet, i+1, colMap, 'contactPersonPhone', data.contactPhone);
+      if (data.locationInfo) {
+        var locStr = typeof data.locationInfo==='string'?data.locationInfo:JSON.stringify(data.locationInfo);
+        setCellByKey(sheet, i+1, colMap, 'locationInfo', locStr);
+      }
 
       // If status changed to Cancelled → free up the slot
       if (oldStatus !== 'Cancelled' && newStatus === 'Cancelled') {
@@ -616,17 +628,19 @@ function saveClient(p) {
       var colMap = {};
       headers.forEach(function(h, idx) { colMap[headerToKey(h)] = idx + 1; });
       ['name','phone','email','address','landmark','lastService','lastServiceDate',
-       'lastCleaningInfo','usageFrequency','nextCleaningDate','notes','source'].forEach(function(k) {
+       'lastCleaningInfo','usageFrequency','nextCleaningDate','notes','locationInfo','source'].forEach(function(k) {
         if (data[k] !== undefined) setCellByKey(sheet, i+1, colMap, k, data[k]);
       });
       return { ok: true, action: 'updated' };
     }
   }
+  var locInfoStr = '';
+  if(data.locationInfo) { try { locInfoStr = typeof data.locationInfo==='string'?data.locationInfo:JSON.stringify(data.locationInfo); }catch(e){} }
   sheet.appendRow([
     data.id||('CL-'+new Date().getTime()),
     data.name||'', data.phone||'', data.email||'', data.address||'', data.landmark||'',
     data.lastService||'', data.lastServiceDate||'', data.lastCleaningInfo||'', data.usageFrequency||data.usage||'',
-    data.nextCleaningDate||'', data.notes||'', data.source||'manual', now()
+    data.nextCleaningDate||'', data.notes||'', locInfoStr, data.source||'manual', now()
   ]);
   return { ok: true, action: 'created' };
 }
