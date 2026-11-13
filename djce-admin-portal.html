@@ -9317,6 +9317,33 @@ function showFUTab(el,show){
   ['fu-c','fu-f'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display=id===show?'':'none';});
 }
 
+/* ===== RICH NOTES EDITOR ===== */
+function richNotesEditor(id, value){
+  // Mini rich-text editor: toolbar + contenteditable div
+  return '<div style="border:1.5px solid var(--border);border-radius:10px;overflow:hidden">'+
+    '<div style="display:flex;gap:2px;padding:4px 6px;background:var(--bg-elev2);border-bottom:1px solid var(--border)">'+
+    '<button type="button" onclick="noteCmd(\'bold\')" style="width:30px;height:28px;border:none;background:none;color:var(--text);font-weight:900;font-size:14px;cursor:pointer;border-radius:4px" title="Bold">B</button>'+
+    '<button type="button" onclick="noteCmd(\'italic\')" style="width:30px;height:28px;border:none;background:none;color:var(--text);font-style:italic;font-size:14px;cursor:pointer;border-radius:4px" title="Italic">I</button>'+
+    '<button type="button" onclick="noteCmd(\'underline\')" style="width:30px;height:28px;border:none;background:none;color:var(--text);text-decoration:underline;font-size:14px;cursor:pointer;border-radius:4px" title="Underline">U</button>'+
+    '<span style="width:1px;background:var(--border);margin:2px 4px"></span>'+
+    '<button type="button" onclick="noteCmd(\'insertUnorderedList\')" style="width:30px;height:28px;border:none;background:none;color:var(--text);font-size:14px;cursor:pointer;border-radius:4px" title="Bullet List">•≡</button>'+
+    '</div>'+
+    '<div contenteditable="true" id="'+id+'" style="min-height:80px;padding:10px 12px;font-size:13px;line-height:1.6;color:var(--text);outline:none;-webkit-user-select:text;user-select:text" placeholder="Type notes here...">'+
+    (value||'')+
+    '</div></div>';
+}
+function noteCmd(cmd){ document.execCommand(cmd,false,null); }
+function getNotesContent(id){
+  var el=document.getElementById(id);
+  return el ? el.innerHTML.trim() : '';
+}
+function renderNotesHtml(notes){
+  if(!notes) return '';
+  // If it contains HTML tags, render as-is; otherwise wrap plain text
+  if(/<[a-z][\s\S]*>/i.test(notes)) return notes;
+  return notes.replace(/\n/g,'<br>');
+}
+
 /* ===== ADD CLIENT VIEW ===== */
 function openNewClient(){
   document.getElementById('emTitle').textContent='Add Client Record';
@@ -9327,12 +9354,14 @@ function openNewClient(){
     '<div class="field"><label>Phone *</label><input id="nc_phone" placeholder="09171234567" type="tel"></div>'+
     '<div class="field"><label>Email</label><input id="nc_email" type="email" placeholder="maria@email.com"></div>'+
     '<div class="field form-full"><label>Address</label><input id="nc_address" placeholder="House/Street/Barangay/City"></div>'+
+    '<div class="field form-full"><label>Landmark</label><input id="nc_landmark" placeholder="e.g. Tapat ng Jollibee, kanto ng simbahan"></div>'+
     '<div class="field"><label>Last Service Done</label><input id="nc_lastSvc" placeholder="e.g. Aircon Cleaning – Split Type"></div>'+
     '<div class="field"><label>Last Service Date</label><input type="date" id="nc_lastDate"></div>'+
+    '<div class="field form-full"><label>Last Cleaning Info (if no exact date)</label><input id="nc_lastInfo" placeholder="e.g. Mga 5 months ago, last summer, di pa na-clean"></div>'+
     '<div class="field"><label>AC Usage Frequency *</label><select id="nc_usage"><option value="">— Select —</option>'+
     USAGE_OPTS.map(u=>'<option>'+u.label+'</option>').join('')+
     '</select></div>'+
-    '<div class="field"><label>Notes (unit info, brand, etc.)</label><input id="nc_notes" placeholder="e.g. Kolin 1.5HP, 2nd floor"></div>'+
+    '<div class="field form-full"><label>Notes (unit info, brand, etc.)</label>'+richNotesEditor('nc_notes','')+'</div>'+
     '</div>'+
     '<div style="background:var(--info-soft);border:1px solid var(--info);border-radius:8px;padding:10px 12px;font-size:12px;margin-top:6px">'+
     '💡 Next cleaning date will be auto-calculated based on usage frequency. Perfect for importing old clients!</div>';
@@ -9352,9 +9381,12 @@ function saveNewClient(){
   CLIENTS[id]={
     id,name,phone,email:document.getElementById('nc_email')?.value||'',
     address:document.getElementById('nc_address')?.value||'',
+    landmark:document.getElementById('nc_landmark')?.value||'',
     lastService:document.getElementById('nc_lastSvc')?.value||'',
-    lastServiceDate:lastDate,usage,
-    notes:document.getElementById('nc_notes')?.value||'',
+    lastServiceDate:lastDate,
+    lastCleaningInfo:document.getElementById('nc_lastInfo')?.value||'',
+    usage,
+    notes:getNotesContent('nc_notes'),
     nextCleaningDate:calcNextCleaning(lastDate,usage),
     source:'manual',createdAt:new Date().toISOString()
   };
@@ -9784,13 +9816,16 @@ function openClientModal(key){
     '<div class="info-row"><span class="info-label">Phone</span>'+(c.phone||'—')+'</div>'+
     '<div class="info-row"><span class="info-label">Email</span>'+(c.email||'—')+'</div>'+
     '<div class="info-row"><span class="info-label">Address</span>'+(c.address||'—')+'</div>'+
-    '<div class="info-row"><span class="info-label">Notes</span>'+(c.notes||'—')+'</div></div>'+
+    '<div class="info-row"><span class="info-label">Landmark</span>'+(c.landmark||'—')+'</div>'+
+    '</div>'+
     '<div><div class="sec-divider">Service Tracking</div>'+
     '<div class="info-row"><span class="info-label">Last Service</span>'+(c.lastService||'—')+'</div>'+
     '<div class="info-row"><span class="info-label">Last Date</span>'+formatDate(c.lastServiceDate)+'</div>'+
+    (c.lastCleaningInfo?'<div class="info-row"><span class="info-label">Cleaning Info</span>'+c.lastCleaningInfo+'</div>':'')+
     '<div class="info-row"><span class="info-label">Usage Freq.</span>'+(c.usage||'Not set')+'</div>'+
     '<div class="info-row"><span class="info-label">Next Cleaning</span><strong style="color:var(--accent)">'+(c.nextCleaningDate?formatDate(c.nextCleaningDate):'Not set')+'</strong></div>'+
     '</div></div>'+
+    (c.notes?'<div class="sec-divider" style="margin-top:14px">Notes</div><div style="font-size:13px;line-height:1.6;padding:8px 0">'+renderNotesHtml(c.notes)+'</div>':'')+
     '<div class="sec-divider" style="margin-top:14px">Booking History ('+bks.length+')</div>'+
     (bks.length ? '<div class="tbl-wrap"><table><thead><tr><th>ID</th><th>Service</th><th>Date</th><th>Status</th><th>Amount</th></tr></thead><tbody>'+
     bks.sort((a,b)=>new Date(b.date)-new Date(a.date)).map(b=>
@@ -9824,12 +9859,14 @@ function editClientModal(id){
     '<div class="field"><label>Phone *</label><input id="ec_phone" type="tel" value="'+escH(c.phone||'')+'"></div>'+
     '<div class="field"><label>Email</label><input id="ec_email" type="email" value="'+escH(c.email||'')+'"></div>'+
     '<div class="field form-full"><label>Address</label><input id="ec_address" value="'+escH(c.address||'')+'"></div>'+
+    '<div class="field form-full"><label>Landmark</label><input id="ec_landmark" value="'+escH(c.landmark||'')+'"></div>'+
     '<div class="field"><label>Last Service Done</label><input id="ec_lastSvc" value="'+escH(c.lastService||'')+'"></div>'+
     '<div class="field"><label>Last Service Date</label><input type="date" id="ec_lastDate" value="'+(c.lastServiceDate||'')+'"></div>'+
+    '<div class="field form-full"><label>Last Cleaning Info (if no exact date)</label><input id="ec_lastInfo" value="'+escH(c.lastCleaningInfo||'')+'"></div>'+
     '<div class="field"><label>AC Usage Frequency</label><select id="ec_usage"><option value="">— Select —</option>'+
     USAGE_OPTS.map(function(u){return '<option'+(c.usage===u.label?' selected':'')+'>'+u.label+'</option>';}).join('')+
     '</select></div>'+
-    '<div class="field"><label>Notes (unit info, brand, etc.)</label><input id="ec_notes" value="'+escH(c.notes||'')+'"></div>'+
+    '<div class="field form-full"><label>Notes (unit info, brand, etc.)</label>'+richNotesEditor('ec_notes',c.notes||'')+'</div>'+
     '</div>';
   document.getElementById('emFoot').innerHTML=
     '<button class="btn btn-outline btn-sm" onclick="closeModal(\'editModal\');openClientModal(\''+String(c.id||c.phone||c.name).replace(/'/g,"\\'")+'\')" >Cancel</button>'+
@@ -9858,9 +9895,12 @@ function saveEditClient(){
     id:id, name:name, phone:phone,
     email:document.getElementById('ec_email')?.value||'',
     address:document.getElementById('ec_address')?.value||'',
+    landmark:document.getElementById('ec_landmark')?.value||'',
     lastService:document.getElementById('ec_lastSvc')?.value||'',
-    lastServiceDate:lastDate, usage:usage,
-    notes:document.getElementById('ec_notes')?.value||'',
+    lastServiceDate:lastDate,
+    lastCleaningInfo:document.getElementById('ec_lastInfo')?.value||'',
+    usage:usage,
+    notes:getNotesContent('ec_notes'),
     nextCleaningDate:calcNextCleaning(lastDate,usage),
     source:source, createdAt:CLIENTS[id]?.createdAt||new Date().toISOString()
   };
