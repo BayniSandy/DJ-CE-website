@@ -1671,7 +1671,9 @@ function pickDate(btn){
       html += '<div style="display:flex;align-items:center;gap:6px;margin-top:4px;">';
       html += '<div style="flex:1;height:4px;background:var(--border);border-radius:2px;max-width:80px;"><div style="height:100%;width:100%;background:#ef4444;border-radius:2px;"></div></div>';
       html += '<span style="font-size:11px;color:#ef4444;font-weight:600;">🔴 FULL ('+s.maxBookings+'/'+s.maxBookings+')</span>';
-      html += '</div></div></div>';
+      html += '</div></div>';
+      html += '<button type="button" onclick="showWaitlistPrompt(\''+s.date+'\',\''+slotLabel+'\')" style="padding:6px 12px;border:1.5px solid #8b5cf655;border-radius:8px;background:rgba(139,92,246,0.12);color:#a78bfa;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:inherit;">📋 Join Waitlist</button>';
+      html += '</div>';
     } else {
       // ── GREEN: Available — clickable ──
       var pct = s.maxBookings>0 ? Math.round((s.currentBookings/s.maxBookings)*100) : 0;
@@ -1686,6 +1688,16 @@ function pickDate(btn){
       html += '</div></div></button>';
     }
   });
+
+  // If all slots are full, show a general waitlist banner
+  var allFull = dateSlots.length > 0 && dateSlots.every(function(s){ return s.remaining <= 0; });
+  if (allFull) {
+    html += '<div style="margin-top:6px;padding:12px 16px;background:rgba(139,92,246,0.1);border:1.5px solid rgba(139,92,246,0.25);border-radius:12px;text-align:center;">';
+    html += '<div style="font-size:13px;font-weight:700;color:#a78bfa;margin-bottom:4px;">All slots for this date are full</div>';
+    html += '<div style="font-size:12px;color:rgba(255,255,255,0.6);margin-bottom:8px;">Join our waiting list — we\'ll call you if a slot opens up!</div>';
+    html += '<button type="button" onclick="showWaitlistPrompt(\''+dateStr+'\',\'Any\')" style="padding:10px 20px;border:none;border-radius:10px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:#fff;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">📋 Join Waiting List</button>';
+    html += '</div>';
+  }
 
   html += '</div>';
 
@@ -1720,6 +1732,101 @@ function selectSlot(btn){
   var selDiv = document.getElementById('slot-selected');
   selDiv.style.display='block';
   selDiv.textContent = '✅ '+dateLabel+' · '+btn.dataset.label+' ('+btn.dataset.time+')';
+}
+
+// ── WAITING LIST PROMPT ──
+function showWaitlistPrompt(date, timeSlot) {
+  // Show a nice modal/overlay for joining the waitlist
+  var overlay = document.createElement('div');
+  overlay.id = 'wl-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);';
+
+  var d = new Date(date+'T00:00:00');
+  var dateLabel = d.toLocaleDateString('en-PH',{weekday:'short', month:'long', day:'numeric', year:'numeric'});
+
+  overlay.innerHTML = '<div style="background:linear-gradient(135deg,#0d1f3c,#162d50);border:1.5px solid rgba(139,92,246,0.3);border-radius:20px;padding:28px 24px;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.5);">'
+    + '<div style="text-align:center;margin-bottom:18px;">'
+    + '<div style="font-size:36px;margin-bottom:8px;">📋</div>'
+    + '<div style="font-family:Nunito,sans-serif;font-size:18px;font-weight:800;color:#fff;">Join Our Waiting List</div>'
+    + '<div style="font-size:13px;color:rgba(255,255,255,0.6);margin-top:4px;">We\'d love to serve you! If a slot opens up for <strong style="color:#a78bfa;">'+dateLabel+'</strong>, we\'ll contact you right away.</div>'
+    + '</div>'
+    + '<div style="font-size:13px;color:rgba(255,255,255,0.7);margin-bottom:12px;">'
+    + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:10px 14px;background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.2);border-radius:10px;">'
+    + '<span>📅</span><span>'+dateLabel+' · '+timeSlot+'</span>'
+    + '</div>'
+    + '<div style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:8px;">💡 Fill in the booking form first, then click below to join the waitlist. We\'ll call you if a slot becomes available!</div>'
+    + '</div>'
+    + '<div style="display:flex;gap:10px;">'
+    + '<button onclick="closeWaitlistPrompt()" style="flex:1;padding:12px;border:1.5px solid rgba(255,255,255,0.15);border-radius:10px;background:rgba(255,255,255,0.08);color:#fff;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;">Maybe Later</button>'
+    + '<button onclick="joinWaitlist(\''+date+'\',\''+timeSlot+'\')" style="flex:1;padding:12px;border:none;border-radius:10px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:#fff;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;">📋 Join Waitlist</button>'
+    + '</div></div>';
+  document.body.appendChild(overlay);
+}
+
+function closeWaitlistPrompt() {
+  var ov = document.getElementById('wl-overlay');
+  if (ov) ov.remove();
+}
+
+function joinWaitlist(date, timeSlot) {
+  closeWaitlistPrompt();
+
+  // Collect what we can from the already-filled booking form
+  var name = (document.getElementById('f-name').value||'').trim();
+  var phoneRaw = (document.getElementById('f-phone').value||'').trim();
+  var phone = phoneRaw ? '+63'+phoneRaw : '';
+  var email = (document.getElementById('f-email').value||'').trim();
+  var barangay = (document.getElementById('f-barangay').value||'').trim();
+  var citySelect = document.getElementById('f-city').value;
+  var city = (citySelect==='other'||citySelect==='Pampanga') ? (document.getElementById('f-city-other').value||'').trim() : citySelect;
+  var house = (document.getElementById('f-house').value||'').trim();
+  var street = (document.getElementById('f-street').value||'').trim();
+  var address = [house, street, barangay, city].filter(Boolean).join(', ');
+
+  // Collect selected services
+  var selected = [...document.querySelectorAll('.svc-item.sel')];
+  var svcNames = selected.map(function(el){ return el.querySelector('input[type=checkbox]').value; });
+  var notes = (document.getElementById('f-notes').value||'').trim();
+
+  if (!name) { toast('Please fill in your name in the booking form first, then join the waitlist.','r'); return; }
+  if (!phoneRaw || phoneRaw.length !== 10) { toast('Please enter your phone number first.','r'); return; }
+
+  var entry = {
+    id: 'WL-' + Date.now(),
+    name: name,
+    phone: phone,
+    email: email,
+    address: address,
+    barangay: barangay,
+    city: city,
+    service: svcNames.join(' | ') || '',
+    preferredDate: date,
+    preferredTime: timeSlot,
+    notes: notes || 'Preferred slot was full',
+    status: 'Waiting',
+    source: 'website',
+    createdAt: new Date().toISOString()
+  };
+
+  if (APPS_SCRIPT_URL) {
+    var cbName = 'djceWL' + Date.now();
+    var script = document.createElement('script');
+    var data = encodeURIComponent(JSON.stringify(entry));
+    script.src = APPS_SCRIPT_URL + '?action=addToWaitlist&data=' + data + '&cb=' + cbName;
+
+    window[cbName] = function(res) {
+      delete window[cbName]; script.remove();
+      toast('📋 You\'re on the waiting list! We\'ll call you if a slot opens up.','g');
+    };
+    script.onerror = function() {
+      delete window[cbName]; script.remove();
+      toast('📋 Added to waiting list — we\'ll be in touch!','g');
+    };
+    setTimeout(function(){ if(window[cbName]){ delete window[cbName]; try{script.remove();}catch(e){} toast('📋 Added to waiting list!','g'); } }, 8000);
+    document.head.appendChild(script);
+  } else {
+    toast('📋 Added to waiting list!','g');
+  }
 }
 
 // Load slots on page load

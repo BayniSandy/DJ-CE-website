@@ -144,6 +144,10 @@ function doGet(e) {
         case 'sendReminder':        result = sendManualReminder(params);  break;
         case 'getSheetHeaders':     result = getSheetHeaders(params);     break;
         case 'fixBookingHeaders':   result = fixBookingHeaders();         break;
+        case 'addToWaitlist':       result = addToWaitlist(params);       break;
+        case 'getWaitlist':         result = getWaitlist(params);         break;
+        case 'updateWaitlist':      result = updateWaitlist(params);      break;
+        case 'deleteWaitlist':      result = deleteWaitlist(params);      break;
         default: result = { ok: false, error: 'Unknown action: ' + action };
       }
     }
@@ -1910,4 +1914,118 @@ function backupSpreadsheet() {
   } catch(e) { Logger.log('Backup email failed: ' + e); }
 
   return { ok: true, action: 'backup', file: copy.getName(), id: copy.getId() };
+}
+
+/* ─── WAITING LIST ───────────────────────────────────────── */
+
+function ensureWaitlistSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Waitlist');
+  if (!sheet) {
+    sheet = ss.insertSheet('Waitlist');
+    sheet.appendRow([
+      'ID', 'Name', 'Phone', 'Email',
+      'Address', 'Barangay', 'City',
+      'Service', 'Preferred Date', 'Preferred Time',
+      'Notes', 'Status', 'Source', 'Created At',
+      'Converted Booking ID', 'Converted At', 'Slot ID'
+    ]);
+    sheet.getRange(1, 1, 1, 17).setFontWeight('bold').setBackground('#1e3a5f').setFontColor('#fff');
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function addToWaitlist(p) {
+  var data = p.data ? JSON.parse(decodeURIComponent(p.data)) : p;
+  var sheet = ensureWaitlistSheet();
+  var id = data.id || ('WL-' + new Date().getTime());
+  var ts = now();
+
+  // Prevent duplicates
+  var rows = sheet.getDataRange().getValues();
+  for (var r = 1; r < rows.length; r++) {
+    if (String(rows[r][0]) === String(id)) {
+      return { ok: true, id: id, note: 'already exists' };
+    }
+  }
+
+  var svcSummary = '';
+  if (data.services && data.services.length) {
+    svcSummary = data.services.map(function(s) {
+      var d = (s.details || []).filter(Boolean);
+      return s.name + (d.length ? ' (' + d.join(', ') + ')' : '');
+    }).join(' | ');
+  } else if (data.service) {
+    svcSummary = data.service;
+  }
+
+  sheet.appendRow([
+    id,
+    data.name       || '',
+    data.phone      || '',
+    data.email      || '',
+    data.address    || '',
+    data.barangay   || '',
+    data.city       || '',
+    svcSummary      || data.service || '',
+    data.preferredDate || data.date || '',
+    data.preferredTime || data.time || '',
+    data.notes      || '',
+    'Waiting',
+    data.source     || 'website',
+    ts,
+    '', '', ''
+  ]);
+
+  return { ok: true, id: id, timestamp: ts };
+}
+
+function getWaitlist(p) {
+  var sheet = ensureWaitlistSheet();
+  var rows = sheet.getDataRange().getValues();
+  if (rows.length <= 1) return { ok: true, waitlist: [] };
+  var headers = rows[0];
+  var list = rows.slice(1).map(function(row) {
+    var obj = {};
+    headers.forEach(function(h, i) { obj[headerToKey(h)] = cellToString(row[i]); });
+    return obj;
+  });
+  return { ok: true, waitlist: list };
+}
+
+function updateWaitlist(p) {
+  var data = p.data ? JSON.parse(decodeURIComponent(p.data)) : p;
+  var sheet = ensureWaitlistSheet();
+  var rows = sheet.getDataRange().getValues();
+  var headers = rows[0];
+
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === String(data.id)) {
+      var colMap = {};
+      headers.forEach(function(h, idx) { colMap[headerToKey(h)] = idx + 1; });
+
+      if (data.status)            setCellByKey(sheet, i+1, colMap, 'status', data.status);
+      if (data.convertedBookingId) setCellByKey(sheet, i+1, colMap, 'convertedBookingId', data.convertedBookingId);
+      if (data.convertedAt)       setCellByKey(sheet, i+1, colMap, 'convertedAt', data.convertedAt);
+      if (data.notes !== undefined) setCellByKey(sheet, i+1, colMap, 'notes', data.notes);
+
+      return { ok: true, id: data.id };
+    }
+  }
+  return { ok: false, error: 'Waitlist entry not found' };
+}
+
+function deleteWaitlist(p) {
+  var data = p.data ? JSON.parse(decodeURIComponent(p.data)) : p;
+  var sheet = ensureWaitlistSheet();
+  var rows = sheet.getDataRange().getValues();
+
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === String(data.id)) {
+      sheet.deleteRow(i + 1);
+      return { ok: true, deleted: data.id };
+    }
+  }
+  return { ok: false, error: 'Not found' };
 }

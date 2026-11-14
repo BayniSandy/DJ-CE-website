@@ -1298,6 +1298,7 @@ const DEFAULT_SERVICE_CATALOG = {
 let SERVICE_CATALOG = {};
 let BOOKING_PHOTOS = {};
 let SCHEDULE_SLOTS = []; // { slotId, date, timeSlot, label, time, maxBookings, currentBookings, remaining, status }
+let WAITLIST = []; // { id, name, phone, email, address, barangay, city, service, preferredDate, preferredTime, notes, status, source, createdAt }
 
 // Accounting module data (local, saved to localStorage)
 let ACCT_EMPLOYEES = []; // { id, name, role, type:'fixed'|'commission'|'oncall'|'investor', dailyRate, mealAllowance, accountUsername, notes, bankName, accountNo, accountName }
@@ -2770,6 +2771,21 @@ async function saveBooking() {
   logActivity('➕', `New booking: ${name} — ${service}${summary?' ('+summary+')':''}`, 'booking');
   addNotif(`New booking from ${name}: ${service}`, 'info', id);
   syncBookingToSheets(BOOKINGS[id]);
+
+  // If converted from waitlist, mark entry as converted
+  if (window._pendingWaitlistConvert) {
+    var wlId = window._pendingWaitlistConvert;
+    window._pendingWaitlistConvert = null;
+    try {
+      callSheets({ action: 'updateWaitlist', data: encodeURIComponent(JSON.stringify({
+        id: wlId, status: 'Converted', convertedBookingId: id, convertedAt: new Date().toISOString()
+      }))});
+      WAITLIST = WAITLIST.filter(w => w.id !== wlId);
+      saveLocalData();
+      logActivity('📋', `Waitlist entry ${wlId} converted to booking ${refNo}`, 'waitlist');
+    } catch(e) { console.log('Waitlist convert update failed:', e); }
+  }
+
   closeModal('editModal');
   switchView('bookings');
   showToast(`Booking created! Ref: ${refNo}`, 'success');
@@ -2799,9 +2815,10 @@ function renderJobs() {
     {id:'backjob',label:'🔁 For Backjob',count:backjob.length,warn:backjob.length>0},
     {id:'done',label:'🏁 Done',count:done.length,warn:false},
     {id:'cancelled',label:'❌ Cancelled',count:cancelled.length,warn:false},
+    {id:'waitlist',label:'📋 Waiting List',count:WAITLIST.length,warn:WAITLIST.length>0},
   ];
 
-  const tabData = {unassigned,pending,confirmed,ongoing,backjob,done,cancelled};
+  const tabData = {unassigned,pending,confirmed,ongoing,backjob,done,cancelled,waitlist:WAITLIST};
   const active = jobsActiveTab;
   const activeBks = tabData[active]||[];
 
@@ -2823,9 +2840,16 @@ function renderJobs() {
     </div>`).join('')}
   </div>`;
 
-  const cardsHtml = activeBks.length
-    ? `<div class="booking-grid" id="jobCards">${activeBks.map(b=>renderJobCard(b,active,techOptions)).join('')}</div>`
-    : `<div class="empty" id="jobCards"><div class="empty-ic">${active==='done'?'🏆':active==='unassigned'?'🎉':'📋'}</div><p>${active==='unassigned'?'All jobs are assigned!':active==='done'?'No completed jobs yet':'No jobs in this category'}</p></div>`;
+  let cardsHtml;
+  if (active === 'waitlist') {
+    cardsHtml = WAITLIST.length
+      ? `<div class="booking-grid" id="jobCards">${WAITLIST.map(w=>renderWaitlistCard(w)).join('')}</div>`
+      : `<div class="empty" id="jobCards"><div class="empty-ic">📋</div><p>No clients on the waiting list</p></div>`;
+  } else {
+    cardsHtml = activeBks.length
+      ? `<div class="booking-grid" id="jobCards">${activeBks.map(b=>renderJobCard(b,active,techOptions)).join('')}</div>`
+      : `<div class="empty" id="jobCards"><div class="empty-ic">${active==='done'?'🏆':active==='unassigned'?'🎉':'📋'}</div><p>${active==='unassigned'?'All jobs are assigned!':active==='done'?'No completed jobs yet':'No jobs in this category'}</p></div>`;
+  }
 
   return `${statsHtml}
   <div class="panel">
@@ -2847,6 +2871,136 @@ function switchJobTab(tab) {
   jobsActiveTab = tab;
   const view = document.getElementById('view-jobs');
   if (view) view.innerHTML = renderJobs();
+}
+
+/* ─── WAITING LIST ─────────────────────────────────────── */
+
+function renderWaitlistCard(w) {
+  const created = w.createdAt ? formatDate(w.createdAt.substring(0,10)) : '';
+  const prefDate = w.preferredDate ? formatDate(w.preferredDate.substring(0,10)) : 'Any';
+  return `<div class="booking-card" style="border-left:4px solid #8b5cf6">
+    <div class="bc-head">
+      <div class="bc-avatar" style="background:#8b5cf6;color:#fff">${(w.name||'?')[0].toUpperCase()}</div>
+      <div><div class="bc-name">${w.name||'—'}</div><div class="bc-id">${w.id||''}</div></div>
+      <span class="status-badge" style="background:rgba(139,92,246,0.15);color:#8b5cf6;margin-left:auto">⏳ Waiting</span>
+    </div>
+    <div class="bc-service">🔧 ${w.service||'Not specified'}</div>
+    <div class="bc-meta">
+      <span class="bc-tag" style="background:var(--bg-elev2)">📅 Preferred: ${prefDate}</span>
+      <span class="bc-tag" style="background:var(--bg-elev2)">📞 ${w.phone||'—'}</span>
+      ${w.city?`<span class="bc-tag" style="background:var(--bg-elev2)">📍 ${w.city}</span>`:''}
+    </div>
+    ${w.notes?`<div style="font-size:12px;color:var(--text-dim);margin-top:6px;padding:0 4px;">💬 ${w.notes}</div>`:''}
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-success btn-xs" onclick="convertWaitlistToBooking('${w.id}')">✅ Convert to Booking</button>
+      <button class="btn btn-outline btn-xs" onclick="addWaitlistManual()">➕ Add to Waitlist</button>
+      <button class="btn btn-danger btn-xs" onclick="removeWaitlistEntry('${w.id}')">🗑️ Remove</button>
+    </div>
+    <div style="font-size:10px;color:var(--text-dim);margin-top:6px;">Added: ${created} · Source: ${w.source||'website'}</div>
+  </div>`;
+}
+
+function convertWaitlistToBooking(wlId) {
+  const w = WAITLIST.find(x => x.id === wlId);
+  if (!w) return showToast('Waitlist entry not found','error');
+
+  // Build address from parts
+  var addr = [w.address, w.barangay ? 'Brgy. '+w.barangay : '', w.city].filter(Boolean).join(', ');
+
+  // Pre-fill the new booking form with waitlist data
+  openNewBooking(w.name||'', w.phone||'', addr);
+
+  // Small delay to let the modal open
+  setTimeout(function() {
+    var el;
+    el = document.getElementById('nb_email'); if(el && w.email) el.value = w.email;
+    el = document.getElementById('nb_notes'); if(el) el.value = w.notes ? '[From Waiting List] ' + w.notes : '[Converted from Waiting List]';
+    el = document.getElementById('nb_date');  if(el && w.preferredDate) el.value = w.preferredDate.substring(0,10);
+
+    // Set the service if available
+    if (w.service) {
+      const svcSel = document.getElementById('nb_service');
+      if (svcSel) {
+        for (let i = 0; i < svcSel.options.length; i++) {
+          if (svcSel.options[i].value === w.service || svcSel.options[i].text === w.service) {
+            svcSel.selectedIndex = i;
+            if (typeof updateServiceFields === 'function') updateServiceFields();
+            break;
+          }
+        }
+      }
+    }
+
+    // Mark for removal after booking is saved
+    window._pendingWaitlistConvert = wlId;
+    showToast('📋 Waitlist info loaded — review and save the booking','info');
+  }, 300);
+}
+
+function removeWaitlistEntry(wlId) {
+  confirm2('Remove from Waiting List', 'Remove this client from the waiting list?', '🗑️', async function() {
+    try {
+      await callSheets({ action: 'deleteWaitlist', data: encodeURIComponent(JSON.stringify({id: wlId})) });
+      WAITLIST = WAITLIST.filter(w => w.id !== wlId);
+      saveLocalData();
+      switchJobTab('waitlist');
+      showToast('Removed from waiting list','success');
+    } catch(e) {
+      showToast('Failed to remove — try again','error');
+    }
+  });
+}
+
+function addWaitlistManual() {
+  var html = `<div style="padding:20px">
+    <h3 style="margin:0 0 16px;font-size:16px;font-weight:800;">📋 Add to Waiting List</h3>
+    <div class="fgroup"><label>Client Name *</label><input type="text" id="wlName" placeholder="Juan dela Cruz"></div>
+    <div class="fgroup"><label>Phone *</label><input type="text" id="wlPhone" placeholder="09XX XXX XXXX"></div>
+    <div class="fgroup"><label>Email</label><input type="text" id="wlEmail" placeholder="email@example.com"></div>
+    <div class="fgroup"><label>Service Needed</label>
+      <select id="wlService"><option value="">— Select —</option>${Object.keys(SERVICE_CATALOG).map(s=>'<option value="'+s+'">'+s+'</option>').join('')}</select>
+    </div>
+    <div class="fgroup"><label>Preferred Date</label><input type="date" id="wlDate"></div>
+    <div class="fgroup"><label>City/Area</label><input type="text" id="wlCity" placeholder="Calumpit, Bulacan"></div>
+    <div class="fgroup"><label>Notes</label><textarea id="wlNotes" rows="2" placeholder="Any special requests or details..."></textarea></div>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="btn btn-gold" onclick="submitWaitlistManual()">📋 Add to Waitlist</button>
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>`;
+  openModal(html);
+}
+
+async function submitWaitlistManual() {
+  var name = (document.getElementById('wlName').value||'').trim();
+  var phone = (document.getElementById('wlPhone').value||'').trim();
+  if (!name) return showToast('Please enter a name','error');
+  if (!phone) return showToast('Please enter a phone number','error');
+
+  var entry = {
+    id: 'WL-' + Date.now(),
+    name: name,
+    phone: phone,
+    email: (document.getElementById('wlEmail').value||'').trim(),
+    service: (document.getElementById('wlService').value||'').trim(),
+    preferredDate: (document.getElementById('wlDate').value||'').trim(),
+    city: (document.getElementById('wlCity').value||'').trim(),
+    notes: (document.getElementById('wlNotes').value||'').trim(),
+    status: 'Waiting',
+    source: 'admin',
+    createdAt: new Date().toISOString()
+  };
+
+  try {
+    await callSheets({ action: 'addToWaitlist', data: encodeURIComponent(JSON.stringify(entry)) });
+    WAITLIST.push(entry);
+    saveLocalData();
+    closeModal();
+    switchJobTab('waitlist');
+    showToast('Added to waiting list ✅','success');
+  } catch(e) {
+    showToast('Failed to save — try again','error');
+  }
 }
 
 function renderJobCard(b, tab, techOptions) {
@@ -2921,6 +3075,16 @@ function quickStatusChange(id, newStatus) {
   logActivity('🔄', `Job ${id} status → ${newStatus}`, 'job');
   showToast(`Status updated to ${newStatus}`, 'success');
   updateNavBadges();
+
+  // If cancelled, check if there are waitlist entries for this date
+  if (newStatus === 'Cancelled' && b.date && WAITLIST.length > 0) {
+    var dateMatch = WAITLIST.filter(w => !w.preferredDate || w.preferredDate.substring(0,10) === b.date.substring(0,10));
+    if (dateMatch.length > 0) {
+      setTimeout(function(){
+        showToast('📋 '+dateMatch.length+' client'+(dateMatch.length>1?'s':'')+' on waiting list! Check the Waiting List tab.', 'info', 5000);
+      }, 800);
+    }
+  }
   // Re-render to move card to correct tab
   const targetTab = {
     'Ongoing':'ongoing','Confirmed':'confirmed','For Backjob':'backjob','Done':'done','Pending':'pending'
@@ -8928,6 +9092,7 @@ function saveLocalData() {
   localStorage.setItem('djce_warranty', JSON.stringify(WARRANTY_LOG));
   localStorage.setItem('djce_time_corrections', JSON.stringify(TIME_CORRECTIONS));
   localStorage.setItem('djce_blacklist', JSON.stringify(BLACKLIST));
+  localStorage.setItem('djce_waitlist', JSON.stringify(WAITLIST));
 }
 
 function loadLocalData() {
@@ -8946,6 +9111,7 @@ function loadLocalData() {
   try { WARRANTY_LOG = JSON.parse(localStorage.getItem('djce_warranty')||'[]'); } catch(e) { WARRANTY_LOG=[]; }
   try { TIME_CORRECTIONS = JSON.parse(localStorage.getItem('djce_time_corrections')||'[]'); } catch(e) { TIME_CORRECTIONS=[]; }
   try { BLACKLIST = JSON.parse(localStorage.getItem('djce_blacklist')||'[]'); } catch(e) { BLACKLIST=[]; }
+  try { WAITLIST = JSON.parse(localStorage.getItem('djce_waitlist')||'[]'); } catch(e) { WAITLIST=[]; }
   autoPurgeTrash();
 }
 
@@ -9159,6 +9325,14 @@ async function fetchFromSheets() {
     if (slotData && slotData.ok && slotData.slots) {
       SCHEDULE_SLOTS = slotData.slots.map(s => { if(s.date&&s.date.length>10) s.date=s.date.substring(0,10); return s; });
     }
+
+    // 7. Waiting List
+    try {
+      const wlData = await callSheets({ action: 'getWaitlist' });
+      if (wlData && wlData.ok && wlData.waitlist) {
+        WAITLIST = wlData.waitlist.filter(w => w.status !== 'Converted' && w.status !== 'Removed');
+      }
+    } catch(wlErr) { console.log('Waitlist sync skipped:', wlErr); }
 
     saveLocalData();
     if (btn) btn.textContent = '⟳ Sync';
