@@ -252,8 +252,9 @@ section{padding:80px 40px;}
   border-color:var(--sky);box-shadow:0 0 0 3px rgba(59,130,246,0.15);
 }
 .fgroup textarea{resize:vertical;min-height:76px;}
-.fgroup select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;}
-.fgroup select option{background:#0d1f3c;color:#fff;}
+.fgroup select{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:40px;min-height:46px;line-height:1.4;}
+.fgroup select option{background:#0d1f3c;color:#fff;padding:10px 12px;}
+.fgroup select option:disabled{color:rgba(255,255,255,0.4);font-size:11px;}
 
 /* pin location */
 .pin-btn{
@@ -825,23 +826,22 @@ footer{
             <div class="fgroup"><label>City/Municipality *</label>
               <select id="f-city" onchange="onAreaChange(this)">
                 <option value="">— Select your area —</option>
-                <optgroup label="📍 Bulacan">
-                  <option value="Calumpit, Bulacan">Calumpit ⭐ (Home Base)</option>
-                  <option value="Malolos, Bulacan">Malolos</option>
-                  <option value="Balagtas, Bulacan">Balagtas</option>
-                  <option value="Guiguinto, Bulacan">Guiguinto</option>
-                  <option value="Bocaue, Bulacan">Bocaue</option>
-                  <option value="Pulilan, Bulacan">Pulilan</option>
-                  <option value="Plaridel, Bulacan">Plaridel</option>
-                </optgroup>
-                <optgroup label="📍 Pampanga">
-                  <option value="Pampanga">Pampanga (Select areas)</option>
-                </optgroup>
-                <option value="other">Other area (not listed)</option>
+                <option disabled style="font-weight:700;color:rgba(255,255,255,0.5);font-size:12px;">── BULACAN ──</option>
+                <option value="Calumpit, Bulacan">  Calumpit ⭐ (Home Base)</option>
+                <option value="Malolos, Bulacan">  Malolos</option>
+                <option value="Balagtas, Bulacan">  Balagtas</option>
+                <option value="Guiguinto, Bulacan">  Guiguinto</option>
+                <option value="Bocaue, Bulacan">  Bocaue</option>
+                <option value="Pulilan, Bulacan">  Pulilan</option>
+                <option value="Plaridel, Bulacan">  Plaridel</option>
+                <option disabled style="font-weight:700;color:rgba(255,255,255,0.5);font-size:12px;">── PAMPANGA ──</option>
+                <option value="Pampanga">  Pampanga (Specify area)</option>
+                <option disabled style="font-weight:700;color:rgba(255,255,255,0.5);font-size:12px;">──────────</option>
+                <option value="other">  Other area (not listed)</option>
               </select>
             </div>
           </div>
-          <div id="area-warning" style="display:none;background:rgba(245,158,11,0.12);border:1.5px solid rgba(245,158,11,0.35);border-radius:12px;padding:14px 18px;margin-bottom:8px;display:none;">
+          <div id="area-warning" style="display:none;background:rgba(245,158,11,0.12);border:1.5px solid rgba(245,158,11,0.35);border-radius:12px;padding:14px 18px;margin-bottom:8px;">
             <div style="display:flex;align-items:flex-start;gap:10px;">
               <span style="font-size:20px;flex-shrink:0;">⚠️</span>
               <div>
