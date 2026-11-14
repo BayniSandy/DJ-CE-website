@@ -241,8 +241,9 @@ function submitBooking(p) {
   sheet.getRange(lastRow, 20).setBackground('#fef3c7').setFontColor('#92400e').setFontWeight('bold');
 
   // Increment slot booking count
-  if (data.date && data.timeSlot) {
-    try { incrementSlotCount(data.date, data.timeSlot); } catch(e) {}
+  var slotTime = data.timeSlot || data.time || '';
+  if (data.date && slotTime) {
+    try { incrementSlotCount(data.date, slotTime); } catch(e) {}
   }
 
   // Send emails
