@@ -822,7 +822,36 @@ footer{
           </div>
           <div class="form-row">
             <div class="fgroup"><label>Barangay *</label><input type="text" id="f-barangay" placeholder="Sta. Cruz"></div>
-            <div class="fgroup"><label>City/Municipality *</label><input type="text" id="f-city" placeholder="Calumpit, Bulacan"></div>
+            <div class="fgroup"><label>City/Municipality *</label>
+              <select id="f-city" onchange="onAreaChange(this)">
+                <option value="">— Select your area —</option>
+                <optgroup label="📍 Bulacan">
+                  <option value="Calumpit, Bulacan">Calumpit ⭐ (Home Base)</option>
+                  <option value="Malolos, Bulacan">Malolos</option>
+                  <option value="Balagtas, Bulacan">Balagtas</option>
+                  <option value="Guiguinto, Bulacan">Guiguinto</option>
+                  <option value="Bocaue, Bulacan">Bocaue</option>
+                  <option value="Pulilan, Bulacan">Pulilan</option>
+                  <option value="Plaridel, Bulacan">Plaridel</option>
+                </optgroup>
+                <optgroup label="📍 Pampanga">
+                  <option value="Pampanga">Pampanga (Select areas)</option>
+                </optgroup>
+                <option value="other">Other area (not listed)</option>
+              </select>
+            </div>
+          </div>
+          <div id="area-warning" style="display:none;background:rgba(245,158,11,0.12);border:1.5px solid rgba(245,158,11,0.35);border-radius:12px;padding:14px 18px;margin-bottom:8px;display:none;">
+            <div style="display:flex;align-items:flex-start;gap:10px;">
+              <span style="font-size:20px;flex-shrink:0;">⚠️</span>
+              <div>
+                <div style="font-family:'Nunito',sans-serif;font-weight:800;color:#f59e0b;font-size:14px;margin-bottom:4px;">Outside Regular Coverage Area</div>
+                <div style="font-size:13px;color:rgba(255,255,255,0.7);line-height:1.5;">Your area may not be within our regular service coverage. You can still submit your booking — our team will review and confirm if we can serve your location. Additional transportation fees may apply.</div>
+              </div>
+            </div>
+          </div>
+          <div id="area-other-input" style="display:none;">
+            <div class="fgroup"><label>Please specify your City/Municipality *</label><input type="text" id="f-city-other" placeholder="e.g. San Fernando, Pampanga"></div>
           </div>
           <div class="fgroup"><label>Landmark * <span style="color:rgba(255,255,255,0.4);font-weight:400;font-size:12px;">(Specific: store/school name, not just "sa dulo")</span></label><input type="text" id="f-landmark" placeholder="Near Jollibee Calumpit, beside Calumpit Public Market…" required></div>
           <div class="fgroup">
@@ -1358,6 +1387,24 @@ function validateEmail(inp){
   }
 }
 
+function onAreaChange(sel){
+  var warn=document.getElementById('area-warning');
+  var otherBox=document.getElementById('area-other-input');
+  var v=sel.value;
+  if(v==='other'){
+    warn.style.display='block';
+    otherBox.style.display='block';
+  } else if(v==='Pampanga'){
+    warn.style.display='none';
+    otherBox.style.display='block';
+    document.getElementById('f-city-other').placeholder='e.g. San Fernando, Pampanga';
+  } else {
+    warn.style.display='none';
+    otherBox.style.display='none';
+    document.getElementById('f-city-other').value='';
+  }
+}
+
 function toggleSvc(el){
   if(['SELECT','INPUT'].includes(event.target.tagName) && event.target.type!=='checkbox') return;
   el.classList.toggle('sel');
@@ -1685,7 +1732,8 @@ function submitForm(){
   const house=document.getElementById('f-house').value.trim();
   const street=document.getElementById('f-street').value.trim();
   const barangay=document.getElementById('f-barangay').value.trim();
-  const city=document.getElementById('f-city').value.trim();
+  var citySelect=document.getElementById('f-city').value;
+  const city=(citySelect==='other'||citySelect==='Pampanga') ? document.getElementById('f-city-other').value.trim() : citySelect;
   const landmark=document.getElementById('f-landmark').value.trim();
   const date=document.getElementById('f-date').value;
   const selected=[...document.querySelectorAll('.svc-item.sel')];
@@ -1696,7 +1744,8 @@ function submitForm(){
   if(!house) return toast('Please enter your house/block number.','r');
   if(!street) return toast('Please enter your street.','r');
   if(!barangay) return toast('Please enter your barangay.','r');
-  if(!city) return toast('Please enter your city/municipality.','r');
+  if(!citySelect) return toast('Please select your city/municipality.','r');
+  if(!city) return toast('Please specify your city/municipality.','r');
   if(!landmark) return toast('Please enter a specific landmark.','r');
   if(!selected.length) return toast('Please select at least one service.','r');
   if(!date||!selectedSlot) return toast('Please select a schedule slot.','r');
@@ -1756,7 +1805,9 @@ function submitForm(){
 }
 
 function resetForm() {
-  ['f-name','f-phone','f-email','f-house','f-street','f-barangay','f-city','f-landmark','f-date','f-notes'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  ['f-name','f-phone','f-email','f-house','f-street','f-barangay','f-city','f-city-other','f-landmark','f-date','f-notes'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  document.getElementById('area-warning').style.display='none';
+  document.getElementById('area-other-input').style.display='none';
   document.getElementById('f-time').value='';
   document.getElementById('f-slot-id').value='';
   document.getElementById('f-lat').value='';
