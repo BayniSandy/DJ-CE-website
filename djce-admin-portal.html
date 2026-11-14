@@ -1043,15 +1043,31 @@ tr:hover td { background:var(--bg-elev2); }
   var isStandalone = window.matchMedia('(display-mode: standalone)').matches
     || window.navigator.standalone === true
     || document.referrer.includes('android-app://');
-  // Detect mobile device: touch-capable + small screen (phone, not tablet)
+  // Detect mobile device — multiple methods for maximum compatibility
   var shortSide = Math.min(screen.width, screen.height);
-  var isMobile = ('ontouchstart' in window || navigator.maxTouchPoints > 0) && shortSide < 768;
+  var hasTouch = ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+  // Method 1: Touch + short side < 1024 (catches large phones like Galaxy A, Redmi Note)
+  var isMobileScreen = hasTouch && shortSide < 1024;
+  // Method 2: User-agent fallback for phones that report unusual screen sizes
+  var ua = navigator.userAgent || '';
+  var isMobileUA = /Android|iPhone|iPod|webOS|BlackBerry|Opera Mini|IEMobile/i.test(ua)
+    && !/iPad/i.test(ua);
+  // Method 3: Check viewport width (more reliable than screen on some devices)
+  var viewW = Math.min(window.innerWidth, window.innerHeight);
+  var isMobileViewport = hasTouch && viewW < 1024;
+  var isMobile = isMobileScreen || isMobileUA || isMobileViewport;
   // Force mobile layout for standalone OR any mobile device
   if(isStandalone || isMobile) document.documentElement.classList.add('pwa-standalone');
   // Also listen for standalone change
   try { window.matchMedia('(display-mode: standalone)').addEventListener('change', function(e){
     if(e.matches) document.documentElement.classList.add('pwa-standalone');
   }); } catch(e){}
+  // Re-check on resize (orientation change, etc.)
+  window.addEventListener('resize', function(){
+    var vw = Math.min(window.innerWidth, window.innerHeight);
+    var touch = ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+    if(touch && vw < 1024) document.documentElement.classList.add('pwa-standalone');
+  });
 })();
 
 /* ===========================
