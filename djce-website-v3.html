@@ -1763,6 +1763,7 @@ function submitForm(){
     houseNo:house,street,barangay,city,
     landmark,lat:pinLat,lng:pinLng,services,date,
     time:document.getElementById('f-time').value,
+    timeSlot:selectedSlot?selectedSlot.timeSlot:'',
     slotId:document.getElementById('f-slot-id').value,
     notes:document.getElementById('f-notes').value,
     source:'website',status:'pending',assigned:'',createdAt:new Date().toISOString()
